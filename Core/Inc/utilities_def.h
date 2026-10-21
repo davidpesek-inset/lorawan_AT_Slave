@@ -80,7 +80,9 @@ typedef enum
   CFG_SEQ_Task_LoRaStoreContextEvent,
   CFG_SEQ_Task_LoRaCertifTx,
   /* USER CODE BEGIN CFG_SEQ_Task_Id_t */
-
+  CFG_SEQ_Task_TstRxPrint,              /* AT+TEST=RXLRPKT: print of a received packet (test_rf.c) */
+  CFG_SEQ_Task_TstRxOnce,
+  CFG_SEQ_Task_IwdgRefresh,             /* IWDG refresh from the main loop (iwdg.c) */
   /* USER CODE END CFG_SEQ_Task_Id_t */
   CFG_SEQ_Task_NBR
 } CFG_SEQ_Task_Id_t;

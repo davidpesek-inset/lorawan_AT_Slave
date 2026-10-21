@@ -80,7 +80,7 @@ void Error_Handler(void);
 #define USARTx_TX_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-
+extern uint8_t nvm_dirty;     /* defined in main.c */
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

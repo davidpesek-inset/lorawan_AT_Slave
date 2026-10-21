@@ -23,9 +23,12 @@
 #include "platform.h"
 #include "lora_at.h"
 #include "lora_command.h"
+#include "eeprom_wrapper.h"
 
 /* USER CODE BEGIN Includes */
-
+#include "stm32_timer.h"
+#include "stm32_seq.h"
+#include "utilities_def.h"
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
@@ -573,7 +576,248 @@ static const struct ATCommand_s ATCommand[] =
     .run = AT_return_error,
   },
   /* USER CODE BEGIN ATCommand */
+// INSET commands
+  {
+    .string = AT_WDT,
+    .size_string = sizeof(AT_WDT) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_WDT" Set watchdog on/off\r\n",
+#endif /* !NO_HELP */
+    .get = AT_wdt_get,
+    .set = AT_wdt_set,
+    .run = AT_wdt_get,
+  },
 
+  {
+    .string = AT_LOG,
+    .size_string = sizeof(AT_LOG) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_LOG" Set Verbose level QUIET|DEBUG\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_log_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_CH,
+    .size_string = sizeof(AT_CH) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_CH"=<ch>,<MHz>,DR<min>,DR<max> Set channel\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,     /* AT_ch_get() is only a debug dump */
+    .set = AT_ch_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_MODE,
+    .size_string = sizeof(AT_MODE) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_MODE"=LWABP|TEST Set work mode\r\n",
+#endif /* !NO_HELP */
+    .get = AT_mode_get,
+    .set = AT_mode_set,
+    .run = AT_mode_get,
+  },
+
+  {
+    .string = AT_POWER,
+    .size_string = sizeof(AT_POWER) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_POWER"=<dBm>[,FORCE] Set LoRaWAN TX power\r\n",
+#endif /* !NO_HELP */
+    .get = AT_power_get,
+    .set = AT_power_set,
+    .run = AT_power_get,
+  },
+
+  {
+    .string = AT_LW,
+    .size_string = sizeof(AT_LW) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_LW"=<DC|NET|ULDL|CT|LDRO|THLD|DUMRX>,<value> | AT"AT_LW"=<NET|ULDL> LoRaWAN settings\r\n",
+#endif /* !NO_HELP */
+    .get = AT_lw_get,
+    .set = AT_lw_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_PORT,
+    .size_string = sizeof(AT_PORT) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_PORT"=<1..255> Set uplink port for MSG/CMSG/MSGHEX/CMSGHEX\r\n",
+#endif /* !NO_HELP */
+    .get = AT_port_get,
+    .set = AT_port_set,
+    .run = AT_port_get,
+  },
+
+  {
+    .string = AT_RETRY,
+    .size_string = sizeof(AT_RETRY) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_RETRY"=<n> Set number of retries of confirmed uplink\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_retry_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_DELAY,
+    .size_string = sizeof(AT_DELAY) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_DELAY"=<RX1|RX2>[,<ms>] Set/get delay of RX window 1/2\r\n",
+#endif /* !NO_HELP */
+    .get = AT_delay_get,
+    .set = AT_delay_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_RXWIN1,
+    .size_string = sizeof(AT_RXWIN1) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_RXWIN1"=<ch>,<MHz> Set RX1 frequency of uplink channel, 0 = uplink frequency\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_rxwin1_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_KEY,
+    .size_string = sizeof(AT_KEY) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_KEY"=<NWKSKEY|APPSKEY>,\"<32 hex>\" Set ABP session key\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_key_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_ID,
+    .size_string = sizeof(AT_ID) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_ID"=DevAddr,\"<8 hex>\" Set DevAddr\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_id_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_MSGHEX,
+    .size_string = sizeof(AT_MSGHEX) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_MSGHEX"=\"<hex>\" Send unconfirmed uplink (port AT+PORT, repeats AT+REPT)\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_msghex_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_CMSGHEX,
+    .size_string = sizeof(AT_CMSGHEX) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_CMSGHEX"=\"<hex>\" Send confirmed uplink (port AT+PORT, transmissions AT+RETRY)\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_cmsghex_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_REPT,
+    .size_string = sizeof(AT_REPT) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_REPT"=<1..15> Set number of transmissions of unconfirmed uplink\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_rept_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_TEMP,
+    .size_string = sizeof(AT_TEMP) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_TEMP" Get MCU temperature in degree Celsius\r\n",
+#endif /* !NO_HELP */
+    .get = AT_temp_run,
+    .set = AT_return_error,
+    .run = AT_temp_run,
+  },
+
+  {
+    .string = AT_RTC,
+    .size_string = sizeof(AT_RTC) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_RTC"=\"YYYY-MM-DD HH:MM:SS\" | UTCMS Set UTC time / get it with ms\r\n",
+#endif /* !NO_HELP */
+    .get = AT_rtc_get,
+    .set = AT_rtc_set,
+    .run = AT_rtc_get,
+  },
+
+  {
+    .string = AT_EEPROM,
+    .size_string = sizeof(AT_EEPROM) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_EEPROM"=<addr>,<val> write/read eeprom on an address\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_eeprom_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_TEST,
+    .size_string = sizeof(AT_TEST) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_TEST"=RFCFG,<MHz>,SF<sf>,<bw>,<txpr>,<rxpr>,<dBm>,ON,OFF,OFF | TXLRPKT,<hex> | RXLRPKT LoRa test mode\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_test_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_LOWPOWER,
+    .size_string = sizeof(AT_LOWPOWER) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_LOWPOWER"=AT+LOWPOWER put stm to sleep | +LOWPOWER=AUTOON|AUTOOFF configure autosleep ON/OFF when sequencer idle\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_lowpower_set,
+    .run = AT_lowpower_run,
+  },
+
+  {
+    .string = AT_UART,
+    .size_string = sizeof(AT_UART) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_UART"=BR[,<baud>] | TIMEOUT[,<ms>] Set/get UART baud rate (after reset) / command timeout\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_uart_set,
+    .run = AT_return_error,
+  },
+
+  {
+    .string = AT_NVM,
+    .size_string = sizeof(AT_NVM) - 1,
+#ifndef NO_HELP
+    .help_string = "AT"AT_NVM" Store the LoRaWAN context (channels, keys, counters) to flash\r\n",
+#endif /* !NO_HELP */
+    .get = AT_return_error,
+    .set = AT_return_error,
+    .run = AT_nvm_run,
+  },
   /* USER CODE END ATCommand */
 };
 
@@ -586,7 +830,9 @@ static uint32_t charCount = 0;
 static uint32_t circBuffOverflow = 0;
 
 /* USER CODE BEGIN PV */
-
+/* AT+UART=TIMEOUT: an incomplete command is discarded after uart_timeout_ms without a new character */
+static UTIL_TIMER_Object_t CmdTimeoutTimer;
+static volatile uint8_t cmd_timeout = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -624,14 +870,15 @@ static void (*NotifyCb)(void);
 static int32_t CMD_ProcessBackSpace(char *cmd);
 
 /* USER CODE BEGIN PFP */
-
+static void OnCmdTimeout(void *context);
 /* USER CODE END PFP */
 
 /* Exported functions --------------------------------------------------------*/
 void CMD_Init(void (*CmdProcessNotify)(void))
 {
   /* USER CODE BEGIN CMD_Init_1 */
-
+  /* before the RX start below: CMD_GetChar starts this timer; period set per character */
+  UTIL_TIMER_Create(&CmdTimeoutTimer, 1000, UTIL_TIMER_ONESHOT, OnCmdTimeout, NULL);
   /* USER CODE END CMD_Init_1 */
   UTIL_ADV_TRACE_StartRxProcess(CMD_GetChar);
   /* register call back*/
@@ -652,7 +899,16 @@ void CMD_Init(void (*CmdProcessNotify)(void))
 void CMD_Process(void)
 {
   /* USER CODE BEGIN CMD_Process_1 */
-
+  if (cmd_timeout != 0U)
+  {
+    /* AT+UART=TIMEOUT: discard the incomplete command, also its characters not processed yet */
+    cmd_timeout = 0;
+    i = 0;
+    UTILS_ENTER_CRITICAL_SECTION();
+    ridx = widx;
+    charCount = 0;
+    UTILS_EXIT_CRITICAL_SECTION();
+  }
   /* USER CODE END CMD_Process_1 */
   /* Process all commands */
   if (circBuffOverflow == 1)
@@ -730,7 +986,12 @@ void CMD_Process(void)
 }
 
 /* USER CODE BEGIN EF */
-
+/* AT+UART=TIMEOUT expired (timer IRQ context): only flag it, the command buffer belongs to CMD_Process */
+static void OnCmdTimeout(void *context)
+{
+  cmd_timeout = 1;
+  UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_Vcom), CFG_SEQ_Prio_0);
+}
 /* USER CODE END EF */
 
 /* Private Functions Definition -----------------------------------------------*/
@@ -786,7 +1047,21 @@ static int32_t CMD_ProcessBackSpace(char *cmd)
 static void CMD_GetChar(uint8_t *rxChar, uint16_t size, uint8_t error)
 {
   /* USER CODE BEGIN CMD_GetChar_1 */
-
+	if ((*rxChar != '\r') && (*rxChar != '\n')) {
+		ram_vars.lowpower_once = 0;
+	}
+	if (*rxChar >= 0x80U) {
+		/* wake-up byte 0xFF of the host (Seeed 4.30.1), possibly corrupted by the wake-up from Stop mode;
+		   AT commands are plain ASCII */
+		return;
+	}
+	/* AT+UART=TIMEOUT: restarted with every character, stopped at the line end */
+	if ((*rxChar == '\r') || (*rxChar == '\n') || (eeprom_vars.uart_timeout_ms == 0U)) {
+		UTIL_TIMER_Stop(&CmdTimeoutTimer);
+	}
+	else {
+		UTIL_TIMER_StartWithPeriod(&CmdTimeoutTimer, eeprom_vars.uart_timeout_ms);
+	}
   /* USER CODE END CMD_GetChar_1 */
   charCount++;
   if (charCount == (CIRC_BUFF_SIZE + 1))
@@ -905,7 +1180,19 @@ static void parse_cmd(const char *cmd)
 static void com_error(ATEerror_t error_type)
 {
   /* USER CODE BEGIN com_error_1 */
-
+  /* Seeed emulation: no OK after the +CMD: answer, errors without the leading empty line.
+     The ESP driver takes the first received line (get_modem_answer), an extra "\r\nOK\r\n" was read
+     as an empty answer of the next query */
+  if (error_type == AT_OK)
+  {
+    return;
+  }
+  if (error_type > AT_MAX)
+  {
+    error_type = AT_MAX;
+  }
+  AT_PPRINTF("%s", ATError_description[error_type] + 2);    /* skip the leading "\r\n" */
+  return;
   /* USER CODE END com_error_1 */
   if (error_type > AT_MAX)
   {

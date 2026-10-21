@@ -79,7 +79,7 @@ typedef enum eATEerror
 #define AT_VER        "+VER"
 #define AT_VL         "+VL"
 #define AT_LTIME      "+LTIME"
-#define AT_RESET      "Z"
+#define AT_RESET      "+RESET"
 
 /* Context Store */
 #define AT_RFS        "+RFS"
@@ -135,7 +135,29 @@ typedef enum eATEerror
 #define AT_BAT        "+BAT"
 
 /* USER CODE BEGIN EM */
-
+// INSET commands
+#define AT_WDT		   "+WDT"
+#define AT_LOG		   "+LOG"
+#define AT_CH		   "+CH"
+#define AT_MODE		   "+MODE"
+#define AT_POWER	   "+POWER"
+#define AT_LW		   "+LW"
+#define AT_PORT		   "+PORT"
+#define AT_RETRY	   "+RETRY"
+#define AT_DELAY	   "+DELAY"
+#define AT_RXWIN1	   "+RXWIN1"
+#define AT_KEY		   "+KEY"
+#define AT_ID		   "+ID"
+#define AT_MSGHEX	   "+MSGHEX"
+#define AT_CMSGHEX	   "+CMSGHEX"
+#define AT_REPT		   "+REPT"
+#define AT_TEMP		   "+TEMP"
+#define AT_RTC		   "+RTC"
+#define AT_EEPROM	   "+EEPROM"
+#define AT_TEST		   "+TEST"
+#define AT_LOWPOWER	   "+LOWPOWER"
+#define AT_UART		   "+UART"
+#define AT_NVM		   "+NVM"
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -655,7 +677,40 @@ ATEerror_t AT_Certif(const char *param);
 ATEerror_t AT_bat_get(const char *param);
 
 /* USER CODE BEGIN EFP */
-
+// INSET commands
+ATEerror_t AT_wdt_set(const char *param);
+ATEerror_t AT_wdt_get(const char *param);
+ATEerror_t AT_log_set(const char *param);
+ATEerror_t AT_ch_set(const char *param);
+void AT_ch_debug_print(uint8_t id);
+ATEerror_t AT_ch_get(const char *param);
+ATEerror_t AT_mode_set(const char *param);
+ATEerror_t AT_mode_get(const char *param);
+ATEerror_t AT_power_set(const char *param);
+ATEerror_t AT_power_get(const char *param);
+ATEerror_t AT_lw_set(const char *param);
+ATEerror_t AT_lw_get(const char *param);
+ATEerror_t AT_port_set(const char *param);
+ATEerror_t AT_port_get(const char *param);
+ATEerror_t AT_retry_set(const char *param);
+ATEerror_t AT_delay_set(const char *param);
+ATEerror_t AT_delay_get(const char *param);
+ATEerror_t AT_rxwin1_set(const char *param);
+ATEerror_t AT_key_set(const char *param);
+ATEerror_t AT_id_set(const char *param);
+ATEerror_t AT_msghex_set(const char *param);
+ATEerror_t AT_cmsghex_set(const char *param);
+void AT_msghex_done(LmHandlerTxParams_t *params);
+ATEerror_t AT_rept_set(const char *param);
+ATEerror_t AT_temp_run(const char *param);
+ATEerror_t AT_rtc_set(const char *param);
+ATEerror_t AT_rtc_get(const char *param);
+ATEerror_t AT_eeprom_set(const char *param);
+ATEerror_t AT_test_set(const char *param);
+ATEerror_t AT_lowpower_set(const char *param);
+ATEerror_t AT_lowpower_run(const char *param);
+ATEerror_t AT_uart_set(const char *param);
+ATEerror_t AT_nvm_run(const char *param);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus

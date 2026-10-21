@@ -136,7 +136,10 @@ int32_t TST_get_config(testParameter_t *Param);
 int32_t TST_stop(void);
 
 /* USER CODE BEGIN EFP */
-
+/* AT+TEST=TXLRPKT: one LoRa packet with testParam, blocking until TX done/timeout. 0 = done */
+int32_t TST_TxLoraPacket(const uint8_t *data, uint8_t len);
+/* AT+TEST=RXLRPKT: continuous LoRa RX with testParam, returns at once */
+int32_t TST_RxLoraContinuous(void);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus

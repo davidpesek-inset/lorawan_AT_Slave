@@ -908,6 +908,17 @@ int8_t RegionEU868AlternateDr( int8_t currentDr, AlternateDrType_t type )
 #endif /* REGION_EU868 */
 }
 
+/* USER (Seeed AT+LW=THLD): LBT parameters, same values as KR920 (RegionKR920.c) */
+#define EU868_LBT_RX_BANDWIDTH                      200000
+#define EU868_LBT_CARRIER_SENSE_TIME                6
+
+/* USER (Seeed AT+LW=THLD): LBT RSSI threshold [dBm], 0 = LBT off.
+   Weak default = LBT off (original behaviour); the application overrides it (lora_at.c). */
+__attribute__((weak)) int16_t RegionEU868LbtThreshold( void )
+{
+    return 0;
+}
+
 LoRaMacStatus_t RegionEU868NextChannel( NextChanParams_t* nextChanParams, uint8_t* channel, TimerTime_t* time, TimerTime_t* aggregatedTimeOff )
 {
 #if defined( REGION_EU868 )
@@ -953,8 +964,33 @@ LoRaMacStatus_t RegionEU868NextChannel( NextChanParams_t* nextChanParams, uint8_
 
     if( status == LORAMAC_STATUS_OK )
     {
-        // We found a valid channel
-        *channel = enabledChannels[randr( 0, nbEnabledChannels - 1 )];
+        /* USER (Seeed AT+LW=THLD): listen before talk, same procedure as RegionKR920NextChannel().
+           Threshold 0 = LBT off (original behaviour: random enabled channel). */
+        int16_t lbtThreshold = RegionEU868LbtThreshold( );
+
+        if( lbtThreshold == 0 )
+        {
+            // We found a valid channel
+            *channel = enabledChannels[randr( 0, nbEnabledChannels - 1 )];
+        }
+        else
+        {
+            status = LORAMAC_STATUS_NO_FREE_CHANNEL_FOUND;
+            for( uint8_t i = 0, j = randr( 0, nbEnabledChannels - 1 ); i < nbEnabledChannels; i++ )
+            {
+                uint8_t channelNext = enabledChannels[j];
+                j = ( j + 1 ) % nbEnabledChannels;
+
+                // Carrier sense: the channel is free when the RSSI stays below the threshold
+                if( Radio.IsChannelFree( RegionNvmGroup2->Channels[channelNext].Frequency, EU868_LBT_RX_BANDWIDTH,
+                                         lbtThreshold, EU868_LBT_CARRIER_SENSE_TIME ) == true )
+                {
+                    *channel = channelNext;
+                    status = LORAMAC_STATUS_OK;
+                    break;
+                }
+            }
+        }
     }
     else if( status == LORAMAC_STATUS_NO_CHANNEL_FOUND )
     {

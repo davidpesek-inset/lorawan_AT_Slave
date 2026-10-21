@@ -22,6 +22,7 @@
 #include "gpio.h"
 #include "iwdg.h"
 #include "eeprom_emul.h"
+#include "eeprom_wrapper.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -45,7 +46,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+uint8_t nvm_dirty = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -87,31 +88,24 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_LoRaWAN_Init();
-  /* EEPROM emulation: the flash must be unlocked while EE_* functions run; lock it back afterwards
-     (the LoRaWAN FLASH_IF module unlocks the flash itself). Forced erase: recover from an interrupted erase. */
+
   HAL_FLASH_Unlock();
   if (EE_Init(EE_FORCED_ERASE) != EE_OK)
   {
     Error_Handler();
   }
+  eeprom_vars_init();
   HAL_FLASH_Lock();
-  MX_IWDG_Init();
-  /* USER CODE BEGIN 2 */
 
-  /* USER CODE END 2 */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+  MX_LoRaWAN_Init();	/* UART, trace, RTC, UTIL_TIMER */
+  if (eeprom_vars.wdt == 1U)
+    {
+      MX_IWDG_Init();                  // potřebuje UTIL_TIMER a RTC
+    }
   while (1)
   {
-    /* USER CODE END WHILE */
     MX_LoRaWAN_Process();
-    IWDG_Refresh();
-
-    /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 3 */
 }
 
 /**

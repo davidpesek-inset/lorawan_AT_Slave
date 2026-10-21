@@ -93,7 +93,8 @@ extern "C" {
 void LoRaWAN_Init(void);
 
 /* USER CODE BEGIN EFP */
-
+void LoRaWAN_StartAbp(void);
+void LoRaWAN_Reinit(void);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus

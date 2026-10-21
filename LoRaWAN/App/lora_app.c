@@ -35,7 +35,8 @@
 #include "flash_if.h"
 
 /* USER CODE BEGIN Includes */
-
+#include "LoRaMac.h"
+#include "eeprom_wrapper.h"
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
@@ -55,7 +56,8 @@
 #define LED_PERIOD_TIME 500
 
 /* USER CODE BEGIN PD */
-
+/* TEMP: 0 = no join/TX/RX LED blinking, the LED shows only the Stop mode (stm32_lpm_if.c) */
+#define LED_BLINK_ENABLED 0
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -246,7 +248,48 @@ static uint8_t FLASH_RAM_buffer[FLASH_IF_BUFFER_SIZE];
 
 /* Exported functions ---------------------------------------------------------*/
 /* USER CODE BEGIN EF */
+/* ABP activation, only if not active yet */
+void LoRaWAN_StartAbp(void)
+{
+  if (LmHandlerJoinStatus() != LORAMAC_HANDLER_SET)
+  {
+    LmHandlerJoin(ACTIVATION_TYPE_ABP, false);
+  }
+}
 
+/* LmHandlerConfigure() overwrites NET, DC and the handler DR with the defaults:
+   apply the values set by AT+LW=NET, AT+LW=DC and AT+DR (EEPROM). Called after every LmHandlerConfigure() */
+static void LoRaWAN_ApplyEeprom(void)
+{
+  MibRequestConfirm_t mib;
+  bool adr = false;
+
+  mib.Type = MIB_PUBLIC_NETWORK;
+  mib.Param.EnablePublicNetwork = (eeprom_vars.net != 0U);
+  LoRaMacMibSetRequestConfirm(&mib);
+  LmHandlerSetDutyCycleEnable(eeprom_vars.dc != 0U);
+
+  /* LmHandlerSetTxDatarate() refuses the DR while ADR is on: ADR is switched off only for this call */
+  LmHandlerGetAdrEnable(&adr);
+  if (adr)
+  {
+    LmHandlerSetAdrEnable(false);
+  }
+  LmHandlerSetTxDatarate((int8_t)eeprom_vars.dr);
+  if (adr)
+  {
+    LmHandlerSetAdrEnable(true);
+  }
+}
+
+/* Re-runs LmHandlerConfigure(): gives the radio back to LoRaMac after the radio test mode
+   (TST_* functions call Radio.Init() with their own callbacks). The context is restored from
+   the RAM backup, call LmHandlerHalt() before entering the test mode to refresh it. */
+void LoRaWAN_Reinit(void)
+{
+  LmHandlerConfigure(&LmHandlerParams);
+  LoRaWAN_ApplyEeprom();
+}
 /* USER CODE END EF */
 
 void LoRaWAN_Init(void)
@@ -316,10 +359,20 @@ void LoRaWAN_Init(void)
   LmHandlerConfigure(&LmHandlerParams);
 
   /* USER CODE BEGIN LoRaWAN_Init_Last */
+  /* Boot: NET, DC and DR from EEPROM, then ABP activation (default mode LWABP), as after AT+MODE=LWABP.
+     Without it AT+LW=NET returns ON after every reset and a module-only reset stops the uplinks */
+  LoRaWAN_ApplyEeprom();
+  if (ram_vars.mode == 0U)
+  {
+    LoRaWAN_StartAbp();
+  }
+#if LED_BLINK_ENABLED
   UTIL_TIMER_Start(&JoinLedTimer);
+#endif /* LED_BLINK_ENABLED */
 
-  APP_PPRINTF("ATtention command interface\r\n");
-  APP_PPRINTF("AT? to list all available functions\r\n");
+  /* Seeed emulation: no boot banner, an unsolicited line after AT+RESET / a reset breaks the ESP driver */
+  //APP_PPRINTF("ATtention command interface\r\n");
+  //APP_PPRINTF("AT? to list all available functions\r\n");
 
   /* USER CODE END LoRaWAN_Init_Last */
 }
@@ -338,9 +391,11 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
   /* USER CODE BEGIN OnRxData_1 */
   if ((appData != NULL) || (params != NULL))
   {
-    HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET); /* LED_BLUE */
+#if LED_BLINK_ENABLED
+    HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET); /* LED_BLUE */
 
     UTIL_TIMER_Start(&RxLedTimer);
+#endif /* LED_BLINK_ENABLED */
 
     AT_event_receive(appData, params);
   }
@@ -350,12 +405,12 @@ static void OnRxData(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 /* USER CODE BEGIN PrFD_LedEvents */
 static void OnTxTimerLedEvent(void *context)
 {
-  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET); /* LED_GREEN */
+  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET); /* LED_GREEN */
 }
 
 static void OnRxTimerLedEvent(void *context)
 {
-  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET); /* LED_BLUE */
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET); /* LED_BLUE */
 }
 
 static void OnJoinTimerLedEvent(void *context)
@@ -371,11 +426,13 @@ static void OnTxData(LmHandlerTxParams_t *params)
   if ((params != NULL))
   {
     /* Process Tx event only if its a mcps response to prevent some internal events (mlme) */
+#if LED_BLINK_ENABLED
     if (params->IsMcpsConfirm != 0)
     {
-      HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET); /* LED_GREEN */
+      HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_RESET); /* LED_GREEN */
       UTIL_TIMER_Start(&TxLedTimer);
     }
+#endif /* LED_BLINK_ENABLED */
     AT_event_confirm(params);
   }
   /* USER CODE END OnTxData_1 */
@@ -388,8 +445,10 @@ static void OnJoinRequest(LmHandlerJoinParams_t *joinParams)
   {
     if (joinParams->Status == LORAMAC_HANDLER_SUCCESS)
     {
+#if LED_BLINK_ENABLED
       UTIL_TIMER_Stop(&JoinLedTimer);
-      HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_RESET); /* LED_RED */
+      HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_SET); /* LED_RED */
+#endif /* LED_BLINK_ENABLED */
 
     }
     AT_event_join(joinParams);

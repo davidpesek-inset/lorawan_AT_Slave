@@ -1019,6 +1019,13 @@ static void UpdateRxSlotIdleState( void )
     }
 }
 
+/* USER (Seeed AT+LW=DUMRX,ON): skip the RX1/RX2 windows after an unconfirmed uplink.
+   Weak default = windows always open; the application overrides it (lora_at.c). */
+__attribute__((weak)) bool LoRaMacSkipRxWindows( void )
+{
+    return false;
+}
+
 static void ProcessRadioTxDone( void )
 {
     GetPhyParams_t getPhy;
@@ -1030,14 +1037,26 @@ static void ProcessRadioTxDone( void )
         Radio.Sleep( );
     }
 #if ( !defined(DISABLE_LORAWAN_RX_WINDOW) || (DISABLE_LORAWAN_RX_WINDOW == 0) )
-    // Setup timers
-    CRITICAL_SECTION_BEGIN( );
-    uint32_t offset = TimerGetCurrentTime( ) - TxDoneParams.CurTime;
-    TimerSetValue( &MacCtx.RxWindowTimer1, MacCtx.RxWindow1Delay - offset );
-    TimerStart( &MacCtx.RxWindowTimer1 );
-    TimerSetValue( &MacCtx.RxWindowTimer2, MacCtx.RxWindow2Delay - offset );
-    TimerStart( &MacCtx.RxWindowTimer2 );
-    CRITICAL_SECTION_END( );
+    /* USER (Seeed AT+LW=DUMRX,ON): unconfirmed uplink of an activated device -> no RX windows,
+       the request ends at once (same path as the ST option DISABLE_LORAWAN_RX_WINDOW below).
+       Confirmed uplinks keep their windows (ACK). */
+    if( ( LoRaMacSkipRxWindows( ) == true ) && ( MacCtx.NodeAckRequested == false ) &&
+        ( Nvm.MacGroup2.NetworkActivation != ACTIVATION_TYPE_NONE ) )
+    {
+        MacCtx.MacState |= LORAMAC_RX_ABORT;
+        MacCtx.MacFlags.Bits.MacDone = 1;
+    }
+    else
+    {
+        // Setup timers
+        CRITICAL_SECTION_BEGIN( );
+        uint32_t offset = TimerGetCurrentTime( ) - TxDoneParams.CurTime;
+        TimerSetValue( &MacCtx.RxWindowTimer1, MacCtx.RxWindow1Delay - offset );
+        TimerStart( &MacCtx.RxWindowTimer1 );
+        TimerSetValue( &MacCtx.RxWindowTimer2, MacCtx.RxWindow2Delay - offset );
+        TimerStart( &MacCtx.RxWindowTimer2 );
+        CRITICAL_SECTION_END( );
+    }
 #else
     if (Nvm.MacGroup2.NetworkActivation == ACTIVATION_TYPE_NONE)
     {
@@ -1121,6 +1140,13 @@ static void PrepareRxDoneAbort( void )
     MacCtx.MacFlags.Bits.MacDone = 1;
 
     UpdateRxSlotIdleState( );
+}
+
+/* USER (Seeed AT+LW=CT,OFF): any valid downlink in RX1/RX2 terminates a confirmed uplink.
+   Weak default = strict LoRaWAN behaviour; the application overrides it (lora_at.c). */
+__attribute__((weak)) bool LoRaMacAckRelaxed( void )
+{
+    return false;
 }
 
 static void ProcessRadioRxDone( void )
@@ -1615,6 +1641,13 @@ static void ProcessRadioRxDone( void )
 
             MacCtx.McpsConfirm.Status = LORAMAC_EVENT_INFO_STATUS_OK;
             MacCtx.McpsConfirm.AckReceived = macMsgData.FHDR.FCtrl.Bits.Ack;
+            /* USER (Seeed AT+LW=CT,OFF): relaxed ACK of a confirmed uplink. McpsConfirm.AckReceived is the
+               only source for the retransmission stop (RetransmitTimeoutTimer, CheckRetransConfirmedUplink) */
+            if( ( MacCtx.NodeAckRequested == true ) && ( LoRaMacAckRelaxed( ) == true ) &&
+                ( ( MacCtx.RxStatus.RxSlot == RX_SLOT_WIN_1 ) || ( MacCtx.RxStatus.RxSlot == RX_SLOT_WIN_2 ) ) )
+            {
+                MacCtx.McpsConfirm.AckReceived = true;
+            }
 
             // Reset ADR ACK Counter only, when RX1 or RX2 slot
             if( ( MacCtx.RxStatus.RxSlot == RX_SLOT_WIN_1 ) ||

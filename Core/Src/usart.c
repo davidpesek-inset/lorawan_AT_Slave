@@ -21,7 +21,7 @@
 #include "usart.h"
 
 /* USER CODE BEGIN 0 */
-
+#include "eeprom_wrapper.h"
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart1;
@@ -67,7 +67,18 @@ void MX_USART1_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART1_Init 2 */
-
+  /* AT+UART=BR: baud rate from EEPROM (eeprom_vars_init() runs before MX_LoRaWAN_Init()).
+     Only BRR is rewritten: a second HAL_UART_Init() would reset the FIFO thresholds set above (CR3).
+     An invalid value keeps USART_BAUDRATE. */
+  if ((eeprom_vars.uart_baud >= 9600U) && (eeprom_vars.uart_baud <= 230400U) &&
+      (eeprom_vars.uart_baud != huart1.Init.BaudRate))
+  {
+    huart1.Init.BaudRate = eeprom_vars.uart_baud;
+    __HAL_UART_DISABLE(&huart1);                  /* BRR is writable only with UE = 0 */
+    huart1.Instance->BRR = UART_DIV_SAMPLING16(HAL_RCCEx_GetPeriphCLKFreq(RCC_PERIPHCLK_USART1),
+                                               huart1.Init.BaudRate, huart1.Init.ClockPrescaler);
+    __HAL_UART_ENABLE(&huart1);
+  }
   /* USER CODE END USART1_Init 2 */
 
 }

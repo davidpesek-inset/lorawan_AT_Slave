@@ -27,7 +27,7 @@
 #include "utilities_def.h"
 
 /* USER CODE BEGIN Includes */
-
+#include "lora_at.h"
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
@@ -66,7 +66,9 @@
 #define DEFAULT_GAUSS_BT              3 /*Lora default in legacy*/
 
 /* USER CODE BEGIN PD */
-
+/* AT+TEST TXLRPKT/RXLRPKT: preambles of the ESP driver RFCFG (TXPR 12, RXPR 15) */
+#define TST_LR_TX_PREAMBLE            12
+#define TST_LR_RX_PREAMBLE            15
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -98,7 +100,13 @@ static RadioEvents_t RadioEvents;
 static uint8_t payload[256] = {0};
 
 /* USER CODE BEGIN PV */
-
+/* AT+TEST=RXLRPKT: last received packet, copied in OnRxDone (radio IRQ), printed by TST_RxPrint
+   (sequencer task). A packet received before the print overwrites the previous one (the beacon comes once) */
+static __IO uint8_t tst_rx_active = 0;
+static uint8_t tst_rx_buf[255];
+static uint8_t tst_rx_len;
+static int16_t tst_rx_rssi;
+static int8_t tst_rx_snr;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -133,7 +141,9 @@ void OnRxTimeout(void);
 void OnRxError(void);
 
 /* USER CODE BEGIN PFP */
-
+static void TST_LoraInit(void);
+static void TST_RxPrint(void);
+static void TST_RxBeacon(void);
 /* USER CODE END PFP */
 
 /* Exported functions --------------------------------------------------------*/
@@ -250,7 +260,7 @@ int32_t TST_get_config(testParameter_t *Param)
 int32_t TST_stop(void)
 {
   /* USER CODE BEGIN TST_stop_1 */
-
+  tst_rx_active = 0;      /* ends AT+TEST=RXLRPKT */
   /* USER CODE END TST_stop_1 */
   TestState = 0;
 
@@ -527,7 +537,81 @@ int32_t TST_RX_Start(int32_t nb_packet)
 }
 
 /* USER CODE BEGIN EF */
+/* AT+TEST=TXLRPKT: one packet, blocking until TX done/timeout (TX_TIMEOUT_VALUE). 0 = done */
+int32_t TST_TxLoraPacket(const uint8_t *data, uint8_t len){
+	TxConfigGeneric_t TxConfig = {0};
 
+	tst_rx_active = 0;                         /* TX ends RXLRPKT */
+	TST_LoraInit();
+	TxConfig.lora.Bandwidth = (RADIO_LoRaBandwidths_t)testParam.bandwidth;
+	TxConfig.lora.SpreadingFactor = (RADIO_LoRaSpreadingFactors_t)testParam.loraSf_datarate;
+	TxConfig.lora.Coderate = (RADIO_LoRaCodingRates_t)testParam.codingRate;
+	TxConfig.lora.LowDatarateOptimize = (RADIO_Ld_Opt_t)testParam.lowDrOpt;
+	TxConfig.lora.PreambleLen = TST_LR_TX_PREAMBLE;
+	TxConfig.lora.LengthMode = RADIO_LORA_PACKET_VARIABLE_LENGTH;
+	TxConfig.lora.CrcMode = RADIO_LORA_CRC_ON;
+	TxConfig.lora.IqInverted = RADIO_LORA_IQ_NORMAL;
+	Radio.RadioSetTxGenericConfig(GENERIC_LORA, &TxConfig, testParam.power, TX_TIMEOUT_VALUE);
+	Radio.SetPublicNetwork(false);             /* NET OFF: private sync word */
+
+	RadioTxDone_flag = 0;
+	RadioTxTimeout_flag = 0;
+	RadioError_flag = 0;
+	UTIL_SEQ_ClrEvt(1 << CFG_SEQ_Evt_RadioOnTstRF);   /* the RX callbacks of RXLRPKT also set it */
+	UTIL_MEM_cpy_8(payload, (void *)data, len);
+	Radio.Send(payload, len);
+	UTIL_SEQ_WaitEvt(1 << CFG_SEQ_Evt_RadioOnTstRF);
+	Radio.Sleep();
+	return (RadioTxDone_flag == 1U) ? 0 : -1;
+}
+
+/* AT+TEST=RXLRPKT: continuous RX, returns at once; every packet printed by TST_RxPrint.
+   Ends with TST_stop() (AT+MODE=LWABP) or TST_TxLoraPacket() */
+int32_t TST_RxLoraContinuous(void){
+	RxConfigGeneric_t RxConfig = {0};
+
+	UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_TstRxPrint), UTIL_SEQ_RFU, TST_RxPrint);
+	TST_LoraInit();
+	RxConfig.lora.Bandwidth = (RADIO_LoRaBandwidths_t)testParam.bandwidth;
+	RxConfig.lora.SpreadingFactor = (RADIO_LoRaSpreadingFactors_t)testParam.loraSf_datarate;
+	RxConfig.lora.Coderate = (RADIO_LoRaCodingRates_t)testParam.codingRate;
+	RxConfig.lora.LowDatarateOptimize = (RADIO_Ld_Opt_t)testParam.lowDrOpt;
+	RxConfig.lora.PreambleLen = TST_LR_RX_PREAMBLE;
+	RxConfig.lora.LengthMode = RADIO_LORA_PACKET_VARIABLE_LENGTH;
+	RxConfig.lora.CrcMode = RADIO_LORA_CRC_ON;
+	RxConfig.lora.IqInverted = RADIO_LORA_IQ_NORMAL;
+	Radio.RadioSetRxGenericConfig(GENERIC_LORA, &RxConfig, RX_CONTINUOUS_ON, LORA_SYMBOL_TIMEOUT);
+	Radio.SetPublicNetwork(false);
+
+	tst_rx_active = 1;
+	/* 0: no RxTimeoutTimer; RxContinuous -> SUBGRF_SetRx(0xFFFFFF), the radio stays in RX after a packet */
+	Radio.Rx(0);
+	return 0;
+}
+
+// future use for receiving single timestamp packet from beacon
+int32_t TST_RxLoraSingle(void){
+	RxConfigGeneric_t RxConfig = {0};
+
+	UTIL_SEQ_RegTask((1 << CFG_SEQ_Task_TstRxOnce), UTIL_SEQ_RFU, TST_RxBeacon);
+	TST_LoraInit();
+	RxConfig.lora.Bandwidth = (RADIO_LoRaBandwidths_t)testParam.bandwidth;
+	RxConfig.lora.SpreadingFactor = (RADIO_LoRaSpreadingFactors_t)testParam.loraSf_datarate;
+	RxConfig.lora.Coderate = (RADIO_LoRaCodingRates_t)testParam.codingRate;
+	RxConfig.lora.LowDatarateOptimize = (RADIO_Ld_Opt_t)testParam.lowDrOpt;
+	RxConfig.lora.PreambleLen = TST_LR_RX_PREAMBLE;
+	RxConfig.lora.LengthMode = RADIO_LORA_PACKET_VARIABLE_LENGTH;
+	RxConfig.lora.CrcMode = RADIO_LORA_CRC_ON;
+	RxConfig.lora.IqInverted = RADIO_LORA_IQ_NORMAL;
+	Radio.RadioSetRxGenericConfig(GENERIC_LORA, &RxConfig, RX_CONTINUOUS_ON, LORA_SYMBOL_TIMEOUT);
+	Radio.SetPublicNetwork(false);
+
+	Radio.Rx(RX_TIMEOUT_VALUE);
+	UTIL_SEQ_WaitEvt(1 << CFG_SEQ_Evt_RadioOnTstRF);
+	Radio.Sleep();
+	// ...
+	return 0;
+}
 /* USER CODE END EF */
 
 /* Private Functions Definition -----------------------------------------------*/
@@ -557,7 +641,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t LoraSnr_FskC
   RadioRxDone_flag = 1;
   UTIL_SEQ_SetEvt(1 << CFG_SEQ_Evt_RadioOnTstRF);
   /* USER CODE BEGIN OnRxDone_2 */
+  /* AT+TEST=RXLRPKT: radio IRQ, only copy here; printed by TST_RxPrint outside the IRQ */
+  if (tst_rx_active != 0U)
+  {
+    tst_rx_len = (size > sizeof(tst_rx_buf)) ? sizeof(tst_rx_buf) : (uint8_t)size;
+    UTIL_MEM_cpy_8(tst_rx_buf, payload, tst_rx_len);
+    tst_rx_rssi = rssi;
+    tst_rx_snr = LoraSnr_FskCfo;
+    UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_TstRxPrint), CFG_SEQ_Prio_0);
 
+    // future use for timestamp beacon receive
+    // UTIL_SEQ_SetTask((1 << CFG_SEQ_Task_TstRxBeacon), CFG_SEQ_Prio_0);
+  }
   /* USER CODE END OnRxDone_2 */
 }
 
@@ -623,5 +718,47 @@ static int32_t Prbs9_generator(uint8_t *payload, uint8_t len)
 }
 
 /* USER CODE BEGIN PrFD */
+/* Radio events and channel for TXLRPKT/RXLRPKT. Radio.Init() takes the radio back from a running RXLRPKT */
+static void TST_LoraInit(void){
+	RadioEvents.TxDone = OnTxDone;
+	RadioEvents.RxDone = OnRxDone;
+	RadioEvents.TxTimeout = OnTxTimeout;
+	RadioEvents.RxTimeout = OnRxTimeout;
+	RadioEvents.RxError = OnRxError;
+	Radio.Init(&RadioEvents);
+	Radio.SetChannel(testParam.freq);
+}
 
+/* CFG_SEQ_Task_TstRxPrint. Seeed format; the ESP driver takes the beacon from the 26 char line
+   +TEST: RX "YYYYMMDDHHMMSS" (7 B BCD, HelperFunctions::format_beacon_date) */
+static void TST_RxPrint(void){
+	uint8_t buf[sizeof(tst_rx_buf)];
+	uint8_t len;
+	uint8_t i;
+
+	/* local copy: OnRxDone (radio IRQ) may overwrite tst_rx_buf with the next packet during the print */
+	UTILS_ENTER_CRITICAL_SECTION();
+	len = tst_rx_len;
+	UTIL_MEM_cpy_8(buf, tst_rx_buf, len);
+	UTILS_EXIT_CRITICAL_SECTION();
+
+	//AT_PPRINTF("+TEST: LEN:%u, RSSI:%d, SNR:%d\r\n", (unsigned)tst_rx_len, (int)tst_rx_rssi, (int)tst_rx_snr);
+	AT_PPRINTF("+TEST: RX \"");
+	for (i = 0; i < len; i++){
+		AT_PPRINTF("%02X", buf[i]);
+	}
+	AT_PPRINTF("\"\r\n");
+}
+
+// save timestamp to rtc
+static void TST_RxBeacon(void){
+	uint8_t i;
+
+	AT_PPRINTF("+TEST: RX \"");
+	for (i = 0; i < tst_rx_len; i++){
+		AT_PPRINTF("%02X", tst_rx_buf[i]);
+	}
+	AT_PPRINTF("\"\r\n");
+	// ...
+}
 /* USER CODE END PrFD */

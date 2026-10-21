@@ -6,13 +6,12 @@
   *
   * Flash map (see STM32WLE5JCIX_FLASH.ld):
   *   0x08000000 - 0x08039FFF  firmware           (FLASH, 232 KB)
-  *   0x0803A000 - 0x0803CFFF  EEPROM emulation   (6 pages, 12 KB)  <- this file
+  *   0x0803A000 - 0x0803BFFF  EEPROM emulation   (4 pages, 8 KB)  <- this file
   *   0x0803E500 - 0x0803E7FF  user keys region
   *   0x0803F000 - 0x0803F7FF  LoRaWAN NVM        (page 126)
   *
   * Pages used = ((NB_OF_VARIABLES / 252, rounded up) * 2) * CYCLES_NUMBER + GUARD_PAGES_NUMBER
-  *            = (2 * 2) * 1 + 2 = 6
-  *
+  *            = (1 * 2) * 1 + 2 = 4
   * Usage rule: the library needs the flash unlocked (HAL_FLASH_Unlock()) while
   * EE_* functions run. The LoRaWAN FLASH_IF module unlocks/locks the flash
   * itself and treats an already unlocked flash as an error, so lock the flash
@@ -46,7 +45,7 @@
 #define CRC_POLYNOMIAL_VALUE    0x8005U /* Polynomial to use for CRC calculation */
 
 /* Number of variables to handle in eeprom: 256 bytes of user EEPROM + 4 settings */
-#define NB_OF_VARIABLES         260U
+#define NB_OF_VARIABLES         132U
 
 #ifdef __cplusplus
 }
