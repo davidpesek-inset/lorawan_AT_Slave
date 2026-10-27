@@ -28,6 +28,7 @@
 /* USER CODE BEGIN Includes */
 #include "stm32_timer.h"
 #include "stm32_seq.h"
+#include "stm32_lpm.h"
 #include "utilities_def.h"
 /* USER CODE END Includes */
 
@@ -878,8 +879,7 @@ void CMD_Init(void (*CmdProcessNotify)(void))
 {
   /* USER CODE BEGIN CMD_Init_1 */
   /* before the RX start below: CMD_GetChar starts this timer; period set per character */
-  UTIL_TIMER_Create(&CmdTimeoutTimer, 1000, UTIL_TIMER_ONESHOT, OnCmdTimeout, NULL);
-  /* USER CODE END CMD_Init_1 */
+  UTIL_TIMER_Create(&CmdTimeoutTimer, 1000, UTIL_TIMER_ONESHOT, OnCmdTimeout, NULL);  /* USER CODE END CMD_Init_1 */
   UTIL_ADV_TRACE_StartRxProcess(CMD_GetChar);
   /* register call back*/
   if (CmdProcessNotify != NULL)
@@ -1052,7 +1052,12 @@ static void CMD_GetChar(uint8_t *rxChar, uint16_t size, uint8_t error)
 	}
 	if (*rxChar >= 0x80U) {
 		/* wake-up byte 0xFF of the host (Seeed 4.30.1), possibly corrupted by the wake-up from Stop mode;
-		   AT commands are plain ASCII */
+		   AT commands are plain ASCII.
+		   With AUTOON stay awake (Sleep mode only, clocks running) until a valid AT command
+		   has been executed, see parse_cmd */
+		if (ram_vars.lowpower_auto == 1U) {
+			UTIL_LPM_SetStopMode((1 << CFG_LPM_UART_WAKE_Id), UTIL_LPM_DISABLE);
+		}
 		return;
 	}
 	/* AT+UART=TIMEOUT: restarted with every character, stopped at the line end */
@@ -1095,6 +1100,7 @@ static void parse_cmd(const char *cmd)
   ATEerror_t status = AT_OK;
   const struct ATCommand_s *Current_ATCommand;
   int32_t i;
+  uint8_t valid = 0;    /* 1 = command recognized and executed (whatever its result) */
 
   if ((cmd[0] != 'A') || (cmd[1] != 'T'))
   {
@@ -1104,9 +1110,11 @@ static void parse_cmd(const char *cmd)
   {
 	  AT_run();
 	  status = AT_OK;
+	  valid = 1;
   }
   else if (cmd[2] == '?')
   {
+    valid = 1;
 #ifdef NO_HELP
 #else
     AT_PPRINTF("AT+<CMD>?        : Get the value\r\n"
@@ -1142,8 +1150,10 @@ static void parse_cmd(const char *cmd)
         {
           case '\0':    /* nothing after the command */
             status = Current_ATCommand->run(cmd);
+            valid = 1;
             break;
           case '=':
+            valid = 1;
             if ((cmd[1] == '?') && (cmd[2] == '\0'))
             {
               AT_PPRINTF(Current_ATCommand->help_string);
@@ -1159,6 +1169,7 @@ static void parse_cmd(const char *cmd)
         	  Current_ATCommand->get(cmd + 1);
 //#endif /* !NO_HELP */
             status = AT_OK;
+            valid = 1;
             break;
           default:
             /* not recognized */
@@ -1173,6 +1184,12 @@ static void parse_cmd(const char *cmd)
 
   com_error(status);
   /* USER CODE BEGIN parse_cmd_2 */
+  /* Wake-up by 0xFF (CMD_GetChar): Stop mode allowed again once a valid command has run.
+     The answer still being sent keeps Stop mode off by itself (CFG_LPM_UART_TX_Id). */
+  if (valid != 0U)
+  {
+    UTIL_LPM_SetStopMode((1 << CFG_LPM_UART_WAKE_Id), UTIL_LPM_ENABLE);
+  }
 
   /* USER CODE END parse_cmd_2 */
 }

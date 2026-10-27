@@ -244,7 +244,21 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 }
 
 /* USER CODE BEGIN EF */
-
+/* Overrun (ORE) and receiver timeout are blocking errors for the HAL: it ends the reception and only
+   calls this callback, so without a restart USART1 RX stays dead until a reset.
+   For framing/noise/parity errors the reception is still running (restarted in
+   HAL_UART_RxCpltCallback), RxState is BUSY_RX and nothing is done here. */
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART1)
+  {
+    if (huart->RxState == HAL_UART_STATE_READY)
+    {
+      /* Error flags are already cleared by HAL_UART_IRQHandler; ErrorCode is reset by the restart */
+      HAL_UART_Receive_IT(huart, &charRx, 1);
+    }
+  }
+}
 /* USER CODE END EF */
 
 /* Private Functions Definition -----------------------------------------------*/

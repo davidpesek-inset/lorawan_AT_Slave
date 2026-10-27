@@ -25,7 +25,8 @@
 #include "usart_if.h"
 
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
+#include "usart.h"
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
@@ -55,7 +56,8 @@ const struct UTIL_LPM_Driver_s UTIL_PowerDriver =
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+/* 1 = UART log line before entering and after leaving Stop mode, 0 = off */
+#define LPM_UART_LOG                         1
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -70,7 +72,7 @@ const struct UTIL_LPM_Driver_s UTIL_PowerDriver =
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-
+static void lpm_log(const char *msg);
 /* USER CODE END PFP */
 
 /* Exported functions --------------------------------------------------------*/
@@ -93,6 +95,7 @@ void PWR_EnterStopMode(void)
 {
   /* USER CODE BEGIN EnterStopMode_1 */
   HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);      /* LED off: MCU goes to Stop mode (LED active low) */
+//  lpm_log("+LPM: SLEEP\r\n");
   /* USER CODE END EnterStopMode_1 */
   HAL_SuspendTick();
   /* Clear Status Flag before entering STOP/STANDBY Mode */
@@ -129,6 +132,7 @@ void PWR_ExitStopMode(void)
   /* Resume not retained USARTx and DMA */
   vcom_Resume();
   /* USER CODE BEGIN ExitStopMode_2 */
+//  lpm_log("+LPM: WAKE\r\n");            /* after the HSI16 restart: USART1 kernel clock */
 
   /* USER CODE END ExitStopMode_2 */
 }
@@ -168,5 +172,15 @@ void PWR_ExitSleepMode(void)
 
 /* Private Functions Definition -----------------------------------------------*/
 /* USER CODE BEGIN PrFD */
-
+/* Called with interrupts masked (UTIL_LPM_EnterLowPower): blocking transmit, not ADV_TRACE (DMA + IRQ).
+   HAL_UART_Transmit returns after TC, so the last bit is out before Stop mode cuts the clock.
+   Stop mode is entered only once the ADV_TRACE DMA transfer is complete, so huart1 is free here. */
+static void lpm_log(const char *msg)
+{
+#if (LPM_UART_LOG == 1)
+  HAL_UART_Transmit(&huart1, (const uint8_t *)msg, (uint16_t)strlen(msg), HAL_MAX_DELAY);
+#else
+  (void)msg;
+#endif /* LPM_UART_LOG */
+}
 /* USER CODE END PrFD */

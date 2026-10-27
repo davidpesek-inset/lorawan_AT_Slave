@@ -10,8 +10,8 @@
 _Static_assert((EE_VA_USER_BASE + EE_VA_USER_WORDS - 1U) <= NB_OF_VARIABLES, "VA must be 1..NB_OF_VARIABLES");
 
 // DEFAULT SETTINGS BELOW ARE THE SETTINGS, THAT ARE SET DURING INITIALIZATION OF STM/LORA
-#define EE_DEF_UART_BR          115200U
-#define EE_DEF_UART_TIMEOUT     500U
+#define EE_DEF_UART_BR          9600U
+#define EE_DEF_UART_TIMEOUT     1000U
 #define EE_DEF_DR               4U
 #define EE_DEF_DC               1U
 #define EE_DEF_NET              0U
@@ -22,7 +22,6 @@ _Static_assert((EE_VA_USER_BASE + EE_VA_USER_WORDS - 1U) <= NB_OF_VARIABLES, "VA
 #define EE_DEF_RETRY            1U
 #define EE_DEF_WDT				1U
 #define EE_DEF_CT               0U
-#define EE_DEF_MODE             0U
 
 EepromVars_t eeprom_vars =
 {
@@ -38,7 +37,6 @@ EepromVars_t eeprom_vars =
   .retry           = EE_DEF_RETRY,
   .wdt			   = EE_DEF_WDT,
   .ct              = EE_DEF_CT,
-  .mode			   = EE_DEF_MODE,
 };
 
 /* TODO: verify the test RF defaults on the original module */
@@ -47,7 +45,7 @@ RamVars_t ram_vars =
 {
   .mode          = 0U,              /* LWABP */
   .log_level     = 0U,              /* QUIET */
-  .lowpower_auto = 0U,              /* AUTOOFF */
+  .lowpower_auto = 1U,              /* AUTOON */
   .lowpower_once = 0U,
   .power_force   = 0U,
   .power		 = 22U,
@@ -122,7 +120,6 @@ EE_Status eeprom_vars_init(void)
   if (EE_ReadVariable32bits(EE_VA_RETRY, &v) == EE_OK)        { eeprom_vars.retry           = (uint8_t)v; }
   if (EE_ReadVariable32bits(EE_VA_WDT, &v) == EE_OK)		  { eeprom_vars.wdt           	= (uint8_t)v; }
   if (EE_ReadVariable32bits(EE_VA_CT, &v) == EE_OK)           { eeprom_vars.ct              = (uint8_t)v; }
-  if (EE_ReadVariable32bits(EE_VA_MODE, &v) == EE_OK)         { eeprom_vars.mode            = (uint8_t)v; }
   return EE_OK;
 }
 
@@ -142,7 +139,6 @@ EE_Status eeprom_vars_write_all(void)
   status |= ee_write(EE_VA_RETRY,        eeprom_vars.retry);
   status |= ee_write(EE_VA_WDT,			 eeprom_vars.wdt);
   status |= ee_write(EE_VA_CT,           eeprom_vars.ct);
-  status |= ee_write(EE_VA_MODE,         eeprom_vars.mode);
 
   /* Marker last and only on success: an interrupted run is repeated at the next boot */
   if (status != EE_OK)
@@ -222,10 +218,4 @@ EE_Status eeprom_set_ct(uint8_t value)
 {
   eeprom_vars.ct = value;
   return ee_write(EE_VA_CT, value);
-}
-
-EE_Status eeprom_set_mode(uint8_t value)
-{
-  eeprom_vars.mode = value;
-  return ee_write(EE_VA_MODE, value);
 }

@@ -48,7 +48,7 @@ typedef enum
   CFG_LPM_APPLI_Id,
   CFG_LPM_UART_TX_Id,
   /* USER CODE BEGIN CFG_LPM_Id_t */
-
+  CFG_LPM_UART_WAKE_Id,             /* Stop mode held off from the 0xFF wake-up byte until a valid AT command has run */
   /* USER CODE END CFG_LPM_Id_t */
 } CFG_LPM_Id_t;
 

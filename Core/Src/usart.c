@@ -140,7 +140,12 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
     HAL_NVIC_SetPriority(USART1_IRQn, 2, 0);
     HAL_NVIC_EnableIRQ(USART1_IRQn);
   /* USER CODE BEGIN USART1_MspInit 1 */
-
+    /* RX (PB7) pull-up: the host TX pin is high-Z in its deep sleep (measured 1.6 V on a floating RX).
+       Noise on the floating line gives false start bits / breaks that leave the start-bit wake-up from
+       Stop1 dead for seconds. Same AF settings as above (GPIO_InitStruct), only Pull changes */
+    GPIO_InitStruct.Pin = USARTx_RX_Pin;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(USARTx_RX_GPIO_Port, &GPIO_InitStruct);
   /* USER CODE END USART1_MspInit 1 */
   }
 }

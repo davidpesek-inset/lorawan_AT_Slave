@@ -229,7 +229,7 @@ void AT_event_join(LmHandlerJoinParams_t *params)
 void AT_event_receive(LmHandlerAppData_t *appData, LmHandlerRxParams_t *params)
 {
   /* USER CODE BEGIN AT_event_receive_1 */
-  return;   /* Seeed emulation: no +EVT lines (they came after +CMSGHEX: Done, breaking get_modem_answer()) */
+  //return;   /* Seeed emulation: no +EVT lines (they came after +CMSGHEX: Done, breaking get_modem_answer()) */
   /* USER CODE END AT_event_receive_1 */
   const char *slotStrings[] = { "1", "2", "C", "C_MC", "P", "P_MC" };
   uint8_t ReceivedDataSize = 0;
