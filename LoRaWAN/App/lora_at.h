@@ -157,7 +157,6 @@ typedef enum eATEerror
 #define AT_TEST		   "+TEST"
 #define AT_LOWPOWER	   "+LOWPOWER"
 #define AT_UART		   "+UART"
-#define AT_NVM		   "+NVM"
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -710,7 +709,6 @@ ATEerror_t AT_test_set(const char *param);
 ATEerror_t AT_lowpower_set(const char *param);
 ATEerror_t AT_lowpower_run(const char *param);
 ATEerror_t AT_uart_set(const char *param);
-ATEerror_t AT_nvm_run(const char *param);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus

@@ -808,17 +808,6 @@ static const struct ATCommand_s ATCommand[] =
     .set = AT_uart_set,
     .run = AT_return_error,
   },
-
-  {
-    .string = AT_NVM,
-    .size_string = sizeof(AT_NVM) - 1,
-#ifndef NO_HELP
-    .help_string = "AT"AT_NVM" Store the LoRaWAN context (channels, keys, counters) to flash\r\n",
-#endif /* !NO_HELP */
-    .get = AT_return_error,
-    .set = AT_return_error,
-    .run = AT_nvm_run,
-  },
   /* USER CODE END ATCommand */
 };
 

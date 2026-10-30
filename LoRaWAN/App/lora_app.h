@@ -28,7 +28,7 @@ extern "C" {
 
 /* Includes ------------------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "LmHandler.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -94,7 +94,7 @@ void LoRaWAN_Init(void);
 
 /* USER CODE BEGIN EFP */
 void LoRaWAN_StartAbp(void);
-void LoRaWAN_Reinit(void);
+void LoRaWAN_Reconfigure(void);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus

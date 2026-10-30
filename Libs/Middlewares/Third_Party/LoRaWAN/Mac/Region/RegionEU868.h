@@ -511,6 +511,14 @@ uint8_t RegionEU868ApplyDrOffset( uint8_t downlinkDwellTime, int8_t dr, int8_t d
  */
 void RegionEU868RxBeaconSetup( RxBeaconSetup_t* rxBeaconSetup, uint8_t* outDr );
 
+/*!
+ * \brief   USER hook (AT+LW=THLD): LBT RSSI threshold. Weak default in RegionEU868.c,
+ *          strong definition in LoRaWAN/App/lorawan_hooks.c.
+ *
+ * \retval  Threshold [dBm], 0 = LBT off (weak default)
+ */
+int16_t RegionEU868LbtThreshold( void );
+
 /*! \} defgroup REGIONEU868 */
 
 #ifdef __cplusplus

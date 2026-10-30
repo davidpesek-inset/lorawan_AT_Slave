@@ -43,12 +43,10 @@ EepromVars_t eeprom_vars =
 
 RamVars_t ram_vars =
 {
-  .mode          = 0U,              /* LWABP */
+  .mode          = 0U,              /* 0:LWABP, 1:TEST */
   .log_level     = 0U,              /* QUIET */
   .lowpower_auto = 1U,              /* AUTOON */
   .lowpower_once = 0U,
-  .power_force   = 0U,
-  .power		 = 22U,
   .adr			 = 0U,
   .class		 = 0U,
   .rx1_delay	 = 1U,

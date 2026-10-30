@@ -45,6 +45,7 @@
 #include "LoRaMacCrypto.h"
 #include "Region.h"
 #include "lora_app.h"
+#include "lorawan_functions.h"
 /* USER CODE END Includes */
 
 /* External variables ---------------------------------------------------------*/
@@ -102,13 +103,6 @@ static UTIL_TIMER_Object_t TxCertifTimer;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-/**
-  * @brief  Get 4 bytes values in hex
-  * @param  from string containing the 16 bytes, something like ab:cd:01:21
-  * @param  value buffer that will contain the bytes read
-  * @retval The number of bytes read
-  */
-static int32_t sscanf_uint32_as_hhx(const char *from, uint32_t *value);
 
 /**
   * @brief  Get 16 bytes values in hex
@@ -188,7 +182,6 @@ static void AT_flush_output(void)
   HAL_Delay(2);        /* 1 byte at 9600 Bd = 1.04 ms */
 }
 /* USER CODE BEGIN PFP */
-static ATEerror_t AT_nvm_store(uint8_t force);
 /* USER CODE END PFP */
 
 /* Exported functions --------------------------------------------------------*/
@@ -485,7 +478,7 @@ ATEerror_t AT_LocalTime_get(const char *param)
 ATEerror_t AT_reset(const char *param)
 {
   /* USER CODE BEGIN AT_reset_1 */
-  (void)AT_nvm_store(0U);     /* changed configuration must not be lost by the reset (AT+UART=BR -> AT+RESET) */
+  (void)lw_nvm_store(0U);     /* changed configuration must not be lost by the reset (AT+UART=BR -> AT+RESET) */
   AT_PPRINTF("+RESET: OK\r\n");
   AT_flush_output();      /* the answer must leave the UART before the reset (ESP waits for it before the baud change) */
   NVIC_SystemReset();
@@ -684,18 +677,10 @@ ATEerror_t AT_NwkSKey_set(const char *param)
   /* USER CODE BEGIN AT_NwkSKey_set_1 */
 
   /* USER CODE END AT_NwkSKey_set_1 */
-  uint8_t nwkSKey[16];
-  if (sscanf_16_hhx(param, nwkSKey) != 16)
-  {
-    return AT_PARAM_ERROR;
-  }
-
-  if (LORAMAC_HANDLER_SUCCESS != LmHandlerSetKey(NWK_S_KEY, nwkSKey))
-  {
-    return AT_ERROR;
-  }
-
-  return AT_OK;
+	if (lw_nwkskey_set(param) != LW_OK){
+		return AT_ERROR;
+	}
+	return AT_OK;
   /* USER CODE BEGIN AT_NwkSKey_set_2 */
 
   /* USER CODE END AT_NwkSKey_set_2 */
@@ -724,18 +709,10 @@ ATEerror_t AT_AppSKey_set(const char *param)
   /* USER CODE BEGIN AT_AppSKey_set_1 */
 
   /* USER CODE END AT_AppSKey_set_1 */
-  uint8_t appSKey[16];
-  if (sscanf_16_hhx(param, appSKey) != 16)
-  {
-    return AT_PARAM_ERROR;
-  }
-
-  if (LORAMAC_HANDLER_SUCCESS != LmHandlerSetKey(APP_S_KEY, appSKey))
-  {
-    return AT_ERROR;
-  }
-
-  return AT_OK;
+	if (lw_appskey_set(param) != LW_OK){
+		return AT_ERROR;
+	}
+	return AT_OK;
   /* USER CODE BEGIN AT_AppSKey_set_2 */
 
   /* USER CODE END AT_AppSKey_set_2 */
@@ -761,24 +738,10 @@ ATEerror_t AT_DevAddr_get(const char *param)
 
 ATEerror_t AT_DevAddr_set(const char *param)
 {
-  /* USER CODE BEGIN AT_DevAddr_set_1 */
-
-  /* USER CODE END AT_DevAddr_set_1 */
-  uint32_t devAddr;
-  if (sscanf_uint32_as_hhx(param, &devAddr) != 4)
-  {
-    return AT_PARAM_ERROR;
-  }
-
-  if (LORAMAC_HANDLER_SUCCESS != LmHandlerSetDevAddr(devAddr))
-  {
-    return AT_ERROR;
-  }
-
-  return AT_OK;
-  /* USER CODE BEGIN AT_DevAddr_set_2 */
-
-  /* USER CODE END AT_DevAddr_set_2 */
+	if (lw_devaddr_set(param) != LW_OK){
+		return AT_ERROR;
+	}
+	return AT_OK;
 }
 
 ATEerror_t AT_DevEUI_get(const char *param)
@@ -1058,10 +1021,9 @@ ATEerror_t AT_ADR_set(const char *param){
 		return AT_PARAM_ERROR;
 	}
 
-	if (LmHandlerSetAdrEnable(adr) != LORAMAC_HANDLER_SUCCESS){
+	if (lw_adr_set(adr) != LW_OK){
 		return AT_ERROR;
 	}
-	nvm_dirty = 1U;      /* LoRaWAN NVM context changed: stored at AT+LW=NET,OFF / AT+NVM / AT+RESET */
 	AT_PPRINTF("+ADR: %s\r\n", adr == true ? "ON" : "OFF");
 	return AT_OK;
 }
@@ -1088,14 +1050,11 @@ ATEerror_t AT_DataRate_set(const char *param){
 	char *end;
 	unsigned long dr;
 	uint8_t datarate;
-	LoRaMacRegion_t region;
-	bool adr;
-	LmHandlerErrorStatus_t status;
 
 	if (strcasecmp(param, "EU868") == 0){
 		/* Single region build: EU868 is always active, only checked. LmHandlerSetActiveRegion() refuses
 		   after the ABP activation (LmHandler.c) and re-runs LmHandlerConfigure() before it */
-		if ((LmHandlerGetActiveRegion(&region) != LORAMAC_HANDLER_SUCCESS) || (region != LORAMAC_REGION_EU868)){
+		if (lw_region_set(LORAMAC_REGION_EU868) != LW_OK){
 			return AT_ERROR;
 		}
 		AT_PPRINTF("+DR: EU868\r\n");
@@ -1107,22 +1066,9 @@ ATEerror_t AT_DataRate_set(const char *param){
 		return AT_PARAM_ERROR;
 	}
 	datarate = (uint8_t)dr;
-	LmHandlerGetAdrEnable(&adr);
-	if (adr){
-		LmHandlerSetAdrEnable(false);
-	}
-	status = LmHandlerSetTxDatarate(datarate);
-	if (adr){
-		LmHandlerSetAdrEnable(true);
-	}
-	if (status != LORAMAC_HANDLER_SUCCESS){
+	if(lw_dr_set(datarate) != LW_OK){
 		return AT_ERROR;
 	}
-	if (eeprom_set_dr((uint8_t)datarate) != EE_OK){
-		return AT_ERROR;
-	}
-	/* EU868 only (single region build) */
-	nvm_dirty = 1U;      /* LoRaWAN NVM context changed: stored at AT+LW=NET,OFF / AT+NVM / AT+RESET */
 	AT_PPRINTF("+DR: EU868 DR%u  SF%u%sBW125K\r\n", (unsigned)datarate, (unsigned)(12U - datarate),
 			(datarate > 2U) ? "  " : " ");
 	return AT_OK;
@@ -1241,7 +1187,7 @@ ATEerror_t AT_DeviceClass_set(const char *param)
   /* USER CODE BEGIN AT_DeviceClass_set_1 */
 
   /* USER CODE END AT_DeviceClass_set_1 */
-  LmHandlerErrorStatus_t errorStatus = LORAMAC_HANDLER_SUCCESS;
+  LW_InitError_t errorStatus = LORAMAC_HANDLER_SUCCESS;
   LoraInfo_t *loraInfo = LoraInfo_GetPtr();
   if (loraInfo == NULL)
   {
@@ -1255,13 +1201,13 @@ ATEerror_t AT_DeviceClass_set(const char *param)
       {
         ClassBEnableRequest = false;
       }
-      errorStatus = LmHandlerRequestClass(CLASS_A);
+      errorStatus = lw_class_set(CLASS_A);
       break;
     case 'B':
       if (loraInfo->ClassB == 1)
       {
         ClassBEnableRequest = true;
-        errorStatus = LmHandlerRequestClass(CLASS_B);  /*Class B AT cmd switch Class B not supported cf.[UM2073]*/
+        errorStatus = lw_class_set(CLASS_B);  /*Class B AT cmd switch Class B not supported cf.[UM2073]*/
       }
       else
       {
@@ -1269,23 +1215,17 @@ ATEerror_t AT_DeviceClass_set(const char *param)
       }
       break;
     case 'C':
-      errorStatus = LmHandlerRequestClass(CLASS_C);
+      errorStatus = lw_class_set(CLASS_C);
       break;
     default:
       return AT_PARAM_ERROR;
   }
 
-  if (errorStatus == LORAMAC_HANDLER_NO_NETWORK_JOINED){
-    return AT_NO_NET_JOINED;
-  }
-  else if (errorStatus == LORAMAC_HANDLER_SUCCESS){
-	  nvm_dirty = 1U;      /* LoRaWAN NVM context changed: stored at AT+LW=NET,OFF / AT+NVM / AT+RESET */
-	  AT_PPRINTF("+CLASS: %c\r\n", param[0]);
-	  return AT_OK;
-  }
-  else{
+  if (errorStatus != LW_OK){
     return AT_ERROR;
   }
+  AT_PPRINTF("+CLASS: %c\r\n", param[0]);
+  return AT_OK;
   /* USER CODE BEGIN AT_DeviceClass_set_2 */
 
   /* USER CODE END AT_DeviceClass_set_2 */
@@ -2236,7 +2176,7 @@ ATEerror_t AT_wdt_set(const char *param){
 	AT_PPRINTF("+WDT: %s\r\n", wdt ? "ON" : "OFF");
 
 	if (changed){
-		(void)AT_nvm_store(0U);     /* changed configuration must not be lost by the reset */
+		(void)lw_nvm_store(0U);     /* changed configuration must not be lost by the reset */
 		AT_flush_output();
 		NVIC_SystemReset();
 		}
@@ -2266,44 +2206,6 @@ ATEerror_t AT_log_set(const char *param){
 	return AT_OK;
 }
 
-/* Sub-GHz radio of the STM32WL: 150..960 MHz (RM0461). Radio.CheckRfFrequency() always returns true
-   (radio.c), so the range is checked here */
-#define AT_RF_FREQ_MIN_HZ   150000000UL
-#define AT_RF_FREQ_MAX_HZ   960000000UL
-
-static bool AT_rf_freq_valid(uint32_t freq){
-	return (freq >= AT_RF_FREQ_MIN_HZ) && (freq <= AT_RF_FREQ_MAX_HZ);
-}
-
-/* EU868 band of a frequency: same table as VerifyRfFreq() in RegionEU868.c (static there) */
-static bool AT_ch_get_band(uint32_t freq, uint8_t *band){
-	if (!AT_rf_freq_valid(freq)){
-		return false;
-	}
-	if ((freq >= 863000000UL) && (freq < 865000000UL)){
-		*band = 2;
-	}
-	else if ((freq >= 865000000UL) && (freq <= 868000000UL)){
-		*band = 0;
-	}
-	else if ((freq > 868000000UL) && (freq <= 868600000UL)){
-		*band = 1;
-	}
-	else if ((freq >= 868700000UL) && (freq <= 869200000UL)){
-		*band = 5;
-	}
-	else if ((freq >= 869400000UL) && (freq <= 869650000UL)){
-		*band = 3;
-	}
-	else if ((freq >= 869700000UL) && (freq <= 870000000UL)){
-		*band = 4;
-	}
-	else{
-		return false;
-	}
-	return true;
-}
-
 /* "868.1" -> 868100000 Hz, up to 6 decimals, no float */
 static bool AT_ch_parse_mhz(const char **p, uint32_t *hz){
 	char *end;
@@ -2312,7 +2214,7 @@ static bool AT_ch_parse_mhz(const char **p, uint32_t *hz){
 	uint32_t mul = 100000UL;
 
 	/* > 960 MHz: out of the radio range, also avoids the uint32 overflow of mhz * 1000000 */
-	if ((end == *p) || (mhz > (AT_RF_FREQ_MAX_HZ / 1000000UL))){
+	if ((end == *p) || (mhz > (LW_RF_FREQ_MAX_HZ / 1000000UL))){
 		return false;
 	}
 	if (*end == '.'){
@@ -2339,9 +2241,6 @@ ATEerror_t AT_ch_set(const char *param){
 	uint32_t freq;
 	uint32_t dr_min;
 	uint32_t dr_max;
-	MibRequestConfirm_t mib;
-	LoRaMacNvmData_t *nvm;
-	ChannelParams_t *ch;
 
 	id = strtoul(p, &end, 10);
 	if ((end == p) || (*end != ',') || (id >= 16U)){
@@ -2365,67 +2264,11 @@ ATEerror_t AT_ch_set(const char *param){
 		return AT_PARAM_ERROR;
 	}
 
-	mib.Type = MIB_NVM_CTXS;
-	LoRaMacMibGetRequestConfirm(&mib);
-	nvm = (LoRaMacNvmData_t *)mib.Param.Contexts;
-	ch = &nvm->RegionGroup2.Channels[id];
-
-	/* Same values already in NVM (and channel enabled): nothing to set, nothing to store */
-	if ((ch->Frequency == freq) &&
-		(ch->DrRange.Fields.Min == (int8_t)dr_min) &&
-		(ch->DrRange.Fields.Max == (int8_t)dr_max) &&
-		(((nvm->RegionGroup2.ChannelsMask[0] >> id) & 1U) != 0U)){
-		AT_PPRINTF("+CH: %u,%u,DR%u:DR%u\r\n", id, ch->Frequency,
-				(unsigned)ch->DrRange.Fields.Min, (unsigned)ch->DrRange.Fields.Max);
-		return AT_OK;
+	if (lw_ch_set(id, dr_min, dr_max, freq) != LW_OK){
+		return AT_ERROR;
 	}
 
-	/* LoRaMacIsBusy(), not LmHandlerIsBusy(): the latter starts a join when not activated */
-	if (LoRaMacIsBusy()){
-		return AT_BUSY_ERROR;
-	}
-
-	uint8_t band;
-	bool in_plan = AT_ch_get_band(freq, &band);
-
-	if (!in_plan){
-		/* Out of the EU868 sub-bands: allowed only with CT OFF (Seeed: customized band plans),
-		   the radio must still support the frequency */
-		if ((eeprom_vars.ct != 0U) || !AT_rf_freq_valid(freq)){
-			return AT_PARAM_ERROR;
-		}
-		band = 0U;   /* duty cycle accounting as 865-868 MHz (1 %); DC is off with the ESP driver */
-	}
-
-	if ((id < 3U) || !in_plan){
-		/* Default channels: LoRaMacChannelAdd() refuses them (the server must not change them);
-		   out-of-plan frequencies: RegionEU868ChannelAdd() refuses them (VerifyRfFreq).
-		   Write them directly into the NVM context. Rx1Frequency (AT+RXWIN1) is kept. */
-		ch->Frequency = freq;
-		ch->DrRange.Fields.Min = (int8_t)dr_min;
-		ch->DrRange.Fields.Max = (int8_t)dr_max;
-		ch->Band = band;
-		nvm->RegionGroup2.ChannelsMask[0] |= (uint16_t)(1U << id);
-	}
-	else{
-		ChannelParams_t params = *ch;    /* keeps Rx1Frequency (AT+RXWIN1) */
-		params.Frequency = freq;
-		params.DrRange.Fields.Min = (int8_t)dr_min;
-		params.DrRange.Fields.Max = (int8_t)dr_max;
-		if (LoRaMacChannelAdd((uint8_t)id, params) != LORAMAC_STATUS_OK){
-			return AT_PARAM_ERROR;
-		}
-	}
-
-	/* Channels live in the LoRaWAN NVM context: store it to flash
-	   (LoRaMacHalt() inside detects the change through the RegionGroup2 CRC) */
-//	if (LmHandlerNvmDataStore() == LORAMAC_HANDLER_ERROR){
-//		return AT_ERROR;
-//	}
-
-	nvm_dirty = 1U;      /* LoRaWAN NVM context changed: stored at AT+LW=NET,OFF / AT+NVM / AT+RESET */
-	AT_PPRINTF("+CH: %u,%u,DR%u:DR%u\r\n", id, ch->Frequency,
-			(unsigned)ch->DrRange.Fields.Min, (unsigned)ch->DrRange.Fields.Max);
+	AT_PPRINTF("+CH: %u,%u,DR%u:DR%u\r\n", id, freq, dr_min, dr_max);
 	return AT_OK;
 }
 
@@ -2464,29 +2307,19 @@ ATEerror_t AT_ch_get(const char *param){
 
 /* AT+MODE=LWABP|TEST -> +MODE: LWABP|TEST */
 ATEerror_t AT_mode_set(const char *param){
+	uint8_t mode;
 	if (strcasecmp(param, "LWABP") == 0){
-		if (ram_vars.mode == 1U){
-			/* TEST -> LWABP: radio test functions replaced the LoRaMac radio callbacks */
-			TST_stop();
-			LoRaWAN_Reinit();
-			ram_vars.mode = 0U;
-		}
-		LoRaWAN_StartAbp();
+		mode = 0;
 	}
 	else if (strcasecmp(param, "TEST") == 0){
-		if (ram_vars.mode == 0U){
-			/* LWABP -> TEST: stop LoRaMac, LmHandlerHalt() also refreshes the RAM backup
-			   of the NVM context used by LoRaWAN_Reinit() */
-			if (LoRaMacIsBusy()){
-				return AT_BUSY_ERROR;
-			}
-			LmHandlerHalt();
-			LoRaMacStop();
-			ram_vars.mode = 1U;
-		}
+		mode = 1;
 	}
 	else{
 		return AT_PARAM_ERROR;
+	}
+
+	if (lw_mode_set(mode) != LW_OK){
+		return AT_ERROR;
 	}
 
 	AT_PPRINTF("+MODE: %s\r\n", (ram_vars.mode == 1U) ? "TEST" : "LWABP");
@@ -2536,9 +2369,8 @@ ATEerror_t AT_power_set(const char *param){
 	long dbm;
 	bool force = false;
 	LoRaMacNvmData_t *nvm;
-	int8_t idx;
-	float gain;
 	MibRequestConfirm_t mib;
+	LW_InitError_t ret;
 
 	dbm = strtol(param, &end, 10);
 	if (end == param){
@@ -2558,56 +2390,14 @@ ATEerror_t AT_power_set(const char *param){
 		return AT_PARAM_ERROR;
 	}
 
-	nvm = AT_power_nvm();
-
-	if (force){
-		if ((dbm < -9) || (dbm > 22)){       /* HP PA range */
-			return AT_PARAM_ERROR;
-		}
-		idx = 0;
-		gain = nvm->MacGroup2.MacParams.MaxEirp - (float)dbm;
-	}
-	else{
-		long diff = (long)nvm->MacGroup2.MacParams.MaxEirp - dbm;
-
-		/* Not a value of the region table; the upper index limit (EU868: 7 = 2 dBm)
-		   is checked by LmHandlerSetTxPower() below */
-		if ((diff < 0) || ((diff % 2) != 0) || (diff > 30)){
-			return AT_PARAM_ERROR;
-		}
-		idx = (int8_t)(diff / 2);
-		gain = AT_power_default_gain(nvm);
+	ret = lw_power_set(dbm, force);
+	if (ret != LW_OK){
+		return ret;
 	}
 
-	/* Set and store only when something changes */
-	if ((nvm->MacGroup1.ChannelsTxPower != idx) ||
-		(nvm->MacGroup2.ChannelsTxPowerDefault != idx) ||
-		(nvm->MacGroup2.MacParams.AntennaGain != gain) ||
-		(nvm->MacGroup2.MacParamsDefaults.AntennaGain != gain)){
-
-		/* LoRaMacIsBusy(), not LmHandlerIsBusy(): the latter starts a join when not activated */
-		if (LoRaMacIsBusy()){
-			return AT_BUSY_ERROR;
-		}
-
-		if (LmHandlerSetTxPower(idx) != LORAMAC_HANDLER_SUCCESS){    /* MIB + LmHandlerParams.TxPower */
-			return AT_PARAM_ERROR;
-		}
-		mib.Type = MIB_CHANNELS_DEFAULT_TX_POWER;
-		mib.Param.ChannelsDefaultTxPower = idx;
-		LoRaMacMibSetRequestConfirm(&mib);
-		mib.Type = MIB_ANTENNA_GAIN;
-		mib.Param.AntennaGain = gain;
-		LoRaMacMibSetRequestConfirm(&mib);
-		mib.Type = MIB_DEFAULT_ANTENNA_GAIN;
-		mib.Param.DefaultAntennaGain = gain;
-		LoRaMacMibSetRequestConfirm(&mib);
-
-		/* Index and antenna gain live in the LoRaWAN NVM context: stored at AT+LW=NET,OFF / AT+NVM / AT+RESET */
-		nvm_dirty = 1U;
-	}
-
-	ram_vars.power_force = force ? 1U : 0U;
+	mib.Type = MIB_NVM_CTXS;
+	LoRaMacMibGetRequestConfirm(&mib);
+	nvm = (LoRaMacNvmData_t *)mib.Param.Contexts;
 	AT_power_print(nvm);
 	return AT_OK;
 }
@@ -2620,68 +2410,30 @@ ATEerror_t AT_power_get(const char *param){
 /* AT+LW=DC,ON|OFF -> +LW: DC, ON|OFF, 0
    3rd field = MaxDCycle in Seeed (aggregated duty cycle 1/2^MaxDCycle, 0 = no limitation); not settable here */
 static ATEerror_t AT_lw_dc_set(const char *val){
-	uint8_t on;
-
+	bool on;
 	if (strcasecmp(val, "ON") == 0){
-		on = 1U;
+		on = true;
 	}
 	else if (strcasecmp(val, "OFF") == 0){
-		on = 0U;
+		on = false;
 	}
 	else{
 		return AT_PARAM_ERROR;
 	}
 	/* Same function as AT_DutyCycle_set(): LoRaMacTestSetDutyCycleOn() -> Nvm.MacGroup2.DutyCycleOn.
 	   EEPROM: LmHandlerConfigure() overwrites the stack value with the region default */
-	LmHandlerSetDutyCycleEnable(on != 0U);
-	if (eeprom_set_dc(on) != EE_OK){
+
+	if (lw_dc_set(on) != LW_OK){
 		return AT_ERROR;
 	}
-
-	nvm_dirty = 1U;      /* LoRaWAN NVM context changed: stored at AT+LW=NET,OFF / AT+NVM / AT+RESET */
 	AT_PPRINTF("+LW: DC, %s, 0\r\n", (on != 0U) ? "ON" : "OFF");
 	return AT_OK;
-}
-
-/* LoRaWAN NVM context (channels, keys, DevAddr, FCnt, power, RX delays, NbTrans...) -> flash.
-   Stored only when an AT command changed the configuration (nvm_dirty, set by the handlers) or force = 1.
-   LmHandlerNvmDataStore() itself writes the flash only when the context CRC changed; every write erases
-   a 2 KB page. FCntUp changes of the uplinks do not set nvm_dirty (not stored, by design for now).
-   Not in TEST mode: NvmDataMgmtStoreEnd() restarts LoRaMac (LoRaMacStart); nvm_dirty stays set */
-static ATEerror_t AT_nvm_store(uint8_t force){
-	if ((nvm_dirty == 0U) && (force == 0U)){
-		return AT_OK;
-	}
-	if (ram_vars.mode != 0U){
-		return AT_ERROR;
-	}
-	/* LoRaMacIsBusy(), not LmHandlerIsBusy(): the latter starts a join when not activated */
-	if (LoRaMacIsBusy()){
-		return AT_BUSY_ERROR;
-	}
-	if (LmHandlerNvmDataStore() == LORAMAC_HANDLER_ERROR){
-		return AT_ERROR;
-	}
-	nvm_dirty = 0U;
-	return AT_OK;
-}
-
-/* AT+NVM -> +NVM: OK   (own command, not Seeed: store the LoRaWAN NVM context to flash now) */
-ATEerror_t AT_nvm_run(const char *param){
-	ATEerror_t status = AT_nvm_store(1U);
-
-	if (status == AT_OK){
-		AT_PPRINTF("+NVM: OK\r\n");
-	}
-	return status;
 }
 
 /* AT+LW=NET,ON|OFF -> +LW: NET, ON|OFF   (ON = public network sync word, OFF = private)
    NET,OFF is the last command of the ESP driver configuration block: the NVM context is stored here */
 static ATEerror_t AT_lw_net_set(const char *val){
-	MibRequestConfirm_t mib;
 	uint8_t on;
-	ATEerror_t status;
 
 	if (strcasecmp(val, "ON") == 0){
 		on = 1U;
@@ -2694,18 +2446,15 @@ static ATEerror_t AT_lw_net_set(const char *val){
 	}
 	/* Nvm.MacGroup2.PublicNetwork + Radio.SetPublicNetwork() (sync word).
 	   EEPROM: LmHandlerConfigure() overwrites it with LORAWAN_PUBLIC_NETWORK */
-	mib.Type = MIB_PUBLIC_NETWORK;
-	mib.Param.EnablePublicNetwork = (on != 0U);
-	LoRaMacMibSetRequestConfirm(&mib);
-	if (eeprom_set_net(on) != EE_OK){
+	if (lw_net_set(on) != LW_OK){
 		return AT_ERROR;
 	}
-	nvm_dirty = 1U;
-	/* end of the ESP configuration block: store the changed configuration (in TEST mode it stays dirty) */
+
+	/* NET,OFF = end of the ESP configuration block: store the changed configuration
+	   (in TEST mode it stays dirty, the store would restart LoRaMac) */
 	if ((on == 0U) && (ram_vars.mode == 0U)){
-		status = AT_nvm_store(0U);
-		if (status != AT_OK){
-			return status;
+		if (lw_nvm_store(0U) != LW_OK){
+			return AT_ERROR;
 		}
 	}
 
@@ -2723,24 +2472,17 @@ static ATEerror_t AT_lw_net_get(void){
 	return AT_OK;
 }
 
-/* ULDL (Seeed): ul = counter of the NEXT uplink (factory default 1), dl = downlink counter (default 0).
-   Stack: FCntList.FCntUp = counter of the LAST sent uplink (0 after reset, LoRaMacCrypto.c sets it
-   when securing a frame), so ul = FCntUp + 1. FCntDown = last received downlink counter
-   (LoRaWAN 1.0.x), FCNT_DOWN_INITIAL_VALUE until the first downlink. */
-static FCntList_t *AT_lw_fcnt(LoRaMacNvmData_t **nvm){
-	MibRequestConfirm_t mib;
-
-	mib.Type = MIB_NVM_CTXS;
-	LoRaMacMibGetRequestConfirm(&mib);
-	*nvm = (LoRaMacNvmData_t *)mib.Param.Contexts;
-	return &(*nvm)->Crypto.FCntList;
-}
-
 /* AT+LW=ULDL -> +LW: ULDL <ul>, <dl> */
 static ATEerror_t AT_lw_uldl_get(void){
 	LoRaMacNvmData_t *nvm;
-	FCntList_t *fcnt = AT_lw_fcnt(&nvm);
-	uint32_t dl = fcnt->FCntDown;
+	FCntList_t *fcnt;
+	uint32_t dl;
+
+	if (lw_nvm_get(&nvm) != LW_OK){
+			return AT_ERROR;
+		}
+	fcnt = &nvm->Crypto.FCntList;
+	dl = fcnt->FCntDown;
 
 	/* tiny_vsnprintf_like: no %l */
 	AT_PPRINTF("+LW: ULDL %u, %u\r\n", (unsigned)(fcnt->FCntUp + 1U),   /* next uplink */
@@ -2750,13 +2492,9 @@ static ATEerror_t AT_lw_uldl_get(void){
 
 /* AT+LW=ULDL,<ul>,<dl> -> +LW: ULDL <ul>, <dl>   (Seeed spec 4.28.2; ul = next uplink counter) */
 static ATEerror_t AT_lw_uldl_set(const char *val){
-	LoRaMacNvmData_t *nvm;
-	FCntList_t *fcnt = AT_lw_fcnt(&nvm);
 	char *end;
 	uint32_t ul;
 	uint32_t dl;
-	uint32_t dl_stack;
-	ATEerror_t status;
 
 	/* Not in TEST mode: the NVM store below restarts LoRaMac (AT_nvm_store) */
 	if (ram_vars.mode != 0U){
@@ -2774,33 +2512,8 @@ static ATEerror_t AT_lw_uldl_set(const char *val){
 	if ((end == val) || (*end != '\0')){
 		return AT_PARAM_ERROR;
 	}
-
-	/* The stack keeps the LAST uplink counter: next = ul -> FCntUp = ul - 1.
-	   ul = 0 is not possible: LoRaMacCryptoSecureMessage() refuses a counter smaller than FCntUp
-	   (0xFFFFFFFF would block every uplink), so the lowest next counter is 1 (FCntUp = 0). */
-	if (ul == 0U){
-		ul = 1U;
-	}
-	/* dl = 0 means "no downlink yet" (same as the GET): FCNT_DOWN_INITIAL_VALUE, otherwise a downlink
-	   with FCnt 0 (after a counter reset on the network server) would be refused as a duplicate */
-	dl_stack = (dl == 0U) ? FCNT_DOWN_INITIAL_VALUE : dl;
-
-	/* Set and store only when something changes */
-	if ((fcnt->FCntUp != (ul - 1U)) || (fcnt->FCntDown != dl_stack)){
-		/* LoRaMacIsBusy(), not LmHandlerIsBusy(): the latter starts a join when not activated */
-		if (LoRaMacIsBusy()){
-			return AT_BUSY_ERROR;
-		}
-		fcnt->FCntUp = ul - 1U;
-		fcnt->FCntDown = dl_stack;
-		nvm->Crypto.LastDownFCnt = dl_stack;   /* the stack keeps it together with FCntDown */
-
-		/* Counters live in the LoRaWAN NVM context (Crypto group): store it to flash */
-		nvm_dirty = 1U;
-		status = AT_nvm_store(0U);
-		if (status != AT_OK){
-			return status;
-		}
+	if (lw_ul_set(ul) != LW_OK || lw_dl_set(dl) != LW_OK){
+		return AT_ERROR;
 	}
 
 	AT_PPRINTF("+LW: ULDL %u, %u\r\n", (unsigned)ul, (unsigned)dl);    /* tiny_vsnprintf_like: no %l */
@@ -2830,11 +2543,6 @@ static ATEerror_t AT_lw_ldro_set(const char *val){
 	return AT_OK;
 }
 
-/* Overrides the weak function in RegionEU868.c: LBT RSSI threshold [dBm], 0 = LBT off */
-int16_t RegionEU868LbtThreshold(void){
-	return eeprom_vars.thld_dbm;
-}
-
 /* AT+LW=THLD,<dBm> -> +LW: THLD, <dBm>
    Listen before talk before every uplink: a channel is used only when its RSSI stays below <dBm>
    for 6 ms; when all enabled channels are busy the uplink fails (LORAMAC_STATUS_NO_FREE_CHANNEL_FOUND).
@@ -2847,48 +2555,42 @@ static ATEerror_t AT_lw_thld_set(const char *val){
 	if ((end == val) || (*end != '\0') || (thld < -128L) || (thld > 0L)){
 		return AT_PARAM_ERROR;
 	}
-	if (eeprom_set_thld((int16_t)thld) != EE_OK){
-		return AT_ERROR;
+
+	if (lw_thld_set((int16_t)thld) != LW_OK){
+			return AT_ERROR;
 	}
+
 	AT_PPRINTF("+LW: THLD, %d\r\n", (int)eeprom_vars.thld_dbm);
 	return AT_OK;
-}
-
-/* AT+LW=DUMRX: RAM only, OFF after every reset (the ESP driver sends it at every start) */
-static uint8_t lw_dumrx = 0U;
-
-/* Overrides the weak function in LoRaMac.c: DUMRX ON = no RX windows after an unconfirmed uplink */
-bool LoRaMacSkipRxWindows(void){
-	return (lw_dumrx != 0U);
 }
 
 /* AT+LW=DUMRX,ON|OFF -> +LW: DUMRX, ON|OFF
    ON: unconfirmed uplinks end right after the TX ("+MSGHEX: Done" without waiting for RX1/RX2);
    no downlinks / MAC commands can be received for them. Confirmed uplinks are not affected. */
 static ATEerror_t AT_lw_dumrx_set(const char *val){
+	bool dumrx;
 	if (strcasecmp(val, "ON") == 0){
-		lw_dumrx = 1U;
+		dumrx = true;
 	}
 	else if (strcasecmp(val, "OFF") == 0){
-		lw_dumrx = 0U;
+		dumrx = false;
 	}
 	else{
 		return AT_PARAM_ERROR;
 	}
-	AT_PPRINTF("+LW: DUMRX, %s\r\n", (lw_dumrx != 0U) ? "ON" : "OFF");
-	return AT_OK;
-}
 
-/* Overrides the weak function in LoRaMac.c: CT OFF = any valid downlink in RX1/RX2
-   terminates a confirmed uplink (Seeed relaxation 1) */
-bool LoRaMacAckRelaxed(void){
-	return (eeprom_vars.ct == 0U);
+	if (lw_dumrx_set(dumrx) != LW_OK){
+		return AT_ERROR;
+	}
+	AT_PPRINTF("+LW: DUMRX, %s\r\n", (eeprom_vars.dumrx != 0U) ? "ON" : "OFF");
+	return AT_OK;
 }
 
 /* AT+LW=CT,ON|OFF -> +LW: CT, ON|OFF
    ON = strict LoRaWAN compliance, OFF (default) = Seeed relaxations:
    1) any valid downlink terminates a confirmed uplink (LoRaMacAckRelaxed)
-   4) AT+CH accepts frequencies out of the EU868 sub-bands (AT_ch_set) */
+   4) AT+CH accepts frequencies out of the EU868 sub-bands (AT_ch_set)  --- by default...
+   */
 static ATEerror_t AT_lw_ct_set(const char *val){
 	uint8_t on;
 
@@ -2901,9 +2603,11 @@ static ATEerror_t AT_lw_ct_set(const char *val){
 	else{
 		return AT_PARAM_ERROR;
 	}
-	if (eeprom_set_ct(on) != EE_OK){
+
+	if(lw_ct_set((bool)on) != LW_OK){
 		return AT_ERROR;
 	}
+
 	AT_PPRINTF("+LW: CT, %s\r\n", (on != 0U) ? "ON" : "OFF");
 	return AT_OK;
 }
@@ -2969,7 +2673,7 @@ ATEerror_t AT_port_set(const char *param){
 	if ((end == param) || (*end != '\0') || (port < 1UL) || (port > 255UL)){
 		return AT_PARAM_ERROR;
 	}
-	if (eeprom_set_port((uint8_t)port) != EE_OK){
+	if (lw_port_set((uint8_t) port) != LW_OK){
 		return AT_ERROR;
 	}
 	AT_PPRINTF("+PORT: %u\r\n", (unsigned)eeprom_vars.port);
@@ -2991,8 +2695,8 @@ ATEerror_t AT_retry_set(const char *param){
 	if ((end == param) || (*end != '\0') || (retry > 254UL)){
 		return AT_PARAM_ERROR;
 	}
-	if (eeprom_set_retry((uint8_t)retry) != EE_OK){
-		return AT_ERROR;
+	if (lw_retry_set((uint8_t) retry) != LW_OK){
+			return AT_ERROR;
 	}
 	AT_PPRINTF("+RETRY: %u\r\n", (unsigned)eeprom_vars.retry);
 	return AT_OK;
@@ -3016,20 +2720,19 @@ ATEerror_t AT_delay_set(const char *param){
 	}
 
 	if (strncasecmp(param, "RX1,", 4) == 0){
-		if (LmHandlerSetRx1Delay(rxDelay) != LORAMAC_HANDLER_SUCCESS){
-			return AT_PARAM_ERROR;
+		if (lw_rx1Delay_set(rxDelay) != LW_OK){
+			return AT_ERROR;
 		}
 	}
 	else if (strncasecmp(param, "RX2,", 4) == 0){
-		if (LmHandlerSetRx2Delay(rxDelay) != LORAMAC_HANDLER_SUCCESS){
-			return AT_PARAM_ERROR;
+		if (lw_rx2Delay_set(rxDelay) != LW_OK){
+			return AT_ERROR;
 		}
 	}
 	else{
 		return AT_PARAM_ERROR;
 	}
 
-	nvm_dirty = 1U;      /* LoRaWAN NVM context changed: stored at AT+LW=NET,OFF / AT+NVM / AT+RESET */
 	AT_PPRINTF("+DELAY: %u\r\n", (unsigned long)rxDelay);
 	return AT_OK;
 }
@@ -3500,7 +3203,7 @@ static ATEerror_t AT_test_rfcfg_set(const char *p){
 	long pow;
 	testParameter_t tp;
 
-	if (!AT_ch_parse_mhz(&p, &freq) || (*p != ',') || !AT_rf_freq_valid(freq)){
+	if (!AT_ch_parse_mhz(&p, &freq) || (*p != ',') || !lw_rf_freq_valid(freq)){
 		return AT_PARAM_ERROR;
 	}
 	p++;
@@ -3672,20 +3375,6 @@ ATEerror_t AT_uart_set(const char *param){
 /* USER CODE END EF */
 
 /* Private Functions Definition -----------------------------------------------*/
-static int32_t sscanf_uint32_as_hhx(const char *from, uint32_t *value)
-{
-  /* USER CODE BEGIN sscanf_uint32_as_hhx_1 */
-
-  /* USER CODE END sscanf_uint32_as_hhx_1 */
-  return tiny_sscanf(from, "%hhx:%hhx:%hhx:%hhx",
-                     &((unsigned char *)(value))[3],
-                     &((unsigned char *)(value))[2],
-                     &((unsigned char *)(value))[1],
-                     &((unsigned char *)(value))[0]);
-  /* USER CODE BEGIN sscanf_uint32_as_hhx_2 */
-
-  /* USER CODE END sscanf_uint32_as_hhx_2 */
-}
 
 static int32_t sscanf_16_hhx(const char *from, uint8_t *pt)
 {

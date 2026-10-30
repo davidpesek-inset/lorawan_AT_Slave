@@ -484,6 +484,22 @@ LoRaMacStatus_t LoRaMacProcessMicForDatablock( uint8_t *buffer, uint32_t size, u
  */
 void LoRaMacReset( void );
 
+/* USER hooks: weak defaults in LoRaMac.c, strong definitions in LoRaWAN/App/lorawan_hooks.c */
+
+/*!
+ * \brief   AT+LW=DUMRX: skip the RX1/RX2 windows after an unconfirmed uplink.
+ *
+ * \retval  true = no RX windows, false = windows always open (weak default)
+ */
+bool LoRaMacSkipRxWindows( void );
+
+/*!
+ * \brief   AT+LW=CT: any valid downlink in RX1/RX2 terminates a confirmed uplink.
+ *
+ * \retval  true = relaxed (Seeed), false = strict LoRaWAN (weak default)
+ */
+bool LoRaMacAckRelaxed( void );
+
 /*! \} defgroup LORAMAC */
 
 #ifdef __cplusplus

@@ -31,7 +31,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stm32_adv_trace.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -46,7 +46,7 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-
+#define DEBUG_PRINTF(...)     UTIL_ADV_TRACE_COND_FSend(VLEVEL_H, T_REG_OFF, TS_OFF, __VA_ARGS__)
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/

@@ -35,6 +35,7 @@
 #include "flash_if.h"
 
 /* USER CODE BEGIN Includes */
+#include "main.h"
 #include "LoRaMac.h"
 #include "eeprom_wrapper.h"
 /* USER CODE END Includes */
@@ -248,6 +249,7 @@ static uint8_t FLASH_RAM_buffer[FLASH_IF_BUFFER_SIZE];
 
 /* Exported functions ---------------------------------------------------------*/
 /* USER CODE BEGIN EF */
+
 /* ABP activation, only if not active yet */
 void LoRaWAN_StartAbp(void)
 {
@@ -261,6 +263,7 @@ void LoRaWAN_StartAbp(void)
    apply the values set by AT+LW=NET, AT+LW=DC and AT+DR (EEPROM). Called after every LmHandlerConfigure() */
 static void LoRaWAN_ApplyEeprom(void)
 {
+	DEBUG_PRINTF("Applying DR, NET, DC configuration from eeprom, since they are overwritten with LoRaMac defaults on LmHandlerConfigure()\r\n");
   MibRequestConfirm_t mib;
   bool adr = false;
 
@@ -285,10 +288,11 @@ static void LoRaWAN_ApplyEeprom(void)
 /* Re-runs LmHandlerConfigure(): gives the radio back to LoRaMac after the radio test mode
    (TST_* functions call Radio.Init() with their own callbacks). The context is restored from
    the RAM backup, call LmHandlerHalt() before entering the test mode to refresh it. */
-void LoRaWAN_Reinit(void)
+void LoRaWAN_Reconfigure(void)
 {
-  LmHandlerConfigure(&LmHandlerParams);
-  LoRaWAN_ApplyEeprom();
+	DEBUG_PRINTF("Reconfiguring LoRaWAN stack with eeprom user values\r\n");
+	LmHandlerConfigure(&LmHandlerParams);
+	LoRaWAN_ApplyEeprom();
 }
 /* USER CODE END EF */
 
@@ -361,11 +365,13 @@ void LoRaWAN_Init(void)
   /* USER CODE BEGIN LoRaWAN_Init_Last */
   /* Boot: NET, DC and DR from EEPROM, then ABP activation (default mode LWABP), as after AT+MODE=LWABP.
      Without it AT+LW=NET returns ON after every reset and a module-only reset stops the uplinks */
-  LoRaWAN_ApplyEeprom();
-  if (ram_vars.mode == 0U)
-  {
-    LoRaWAN_StartAbp();
-  }
+  // LoRaWAN_ApplyEeprom();
+
+  // TOTO NE - Musi se nejdrive nastavit klice pred joinem
+  //if (ram_vars.mode == 0U)
+  //{
+  //  LoRaWAN_StartAbp();
+  //}
 #if LED_BLINK_ENABLED
   UTIL_TIMER_Start(&JoinLedTimer);
 #endif /* LED_BLINK_ENABLED */

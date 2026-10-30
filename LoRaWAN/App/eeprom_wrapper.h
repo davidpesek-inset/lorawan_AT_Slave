@@ -28,7 +28,7 @@
 #define EE_VA_MODE				14U
 /* 15..16 reserved */
 #define EE_VA_USER_BASE         17U   /* AT+EEPROM user area, 4 bytes per variable */
-#define EE_VA_USER_WORDS        96U   /* 70 x 4 B = 280 B, VA 17..86 */
+#define EE_VA_USER_WORDS        96U   /* 96 x 4 B = 384 B, VA 17..112 */
 #define EE_VA_USER_MIN			EE_VA_USER_BASE
 #define EE_VA_USER_MAX			(EE_VA_USER_BASE + EE_VA_USER_WORDS - 1)
 #define EE_INIT_MARK_VALUE      1U
@@ -48,7 +48,6 @@ typedef struct
   uint8_t  retry;            /* AT+RETRY */
   uint8_t  wdt;            /* AT+WDT */
   uint8_t  ct;               /* AT+LW=CT     0 = OFF (Seeed relaxations, default), 1 = ON (strict LoRaWAN) */
-  uint8_t  mode;			// AT+MODE=LWABP|TEST	0 = LWABP, 1 = TEST
 } EepromVars_t;
 
 typedef struct{
@@ -64,8 +63,6 @@ typedef struct
   uint8_t  log_level;        /* AT+LOG       0 = QUIET, 1 = DEBUG */
   uint8_t  lowpower_auto;    /* AT+LOWPOWER  0 = AUTOOFF, 1 = AUTOON */
   volatile uint8_t lowpower_once;
-  uint8_t  power_force;      /* AT+POWER     1 = FORCE */
-  uint8_t  power;
   uint8_t  adr;
   uint8_t  class;
   uint8_t  ct;
